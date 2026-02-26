@@ -1,0 +1,154 @@
+﻿import { api } from "@/lib/axios";
+import type {
+  AdminMaterialApproveRequest,
+  AdminMaterialJobCreate,
+  FlashcardItem,
+  ConceptBulkCreate,
+  ConceptMaterialResponse,
+  MaterialJobStatusResponse,
+  SubjectCreate,
+  SubjectResponse
+} from "@/features/study_material/types";
+
+const BASE_PATH = "/v1/study-material";
+
+export const createSubject = async (payload: SubjectCreate): Promise<SubjectResponse> => {
+  const response = await api.post(`${BASE_PATH}/admin/subjects`, payload);
+  return response.data;
+};
+
+export const addConceptsBulk = async (
+  subjectId: string,
+  payload: ConceptBulkCreate
+): Promise<SubjectResponse> => {
+  const response = await api.post(`${BASE_PATH}/admin/subjects/${subjectId}/concepts/bulk`, payload);
+  return response.data;
+};
+
+export const getSubject = async (subjectId: string): Promise<SubjectResponse> => {
+  const response = await api.get(`${BASE_PATH}/admin/subjects/${subjectId}`);
+  return response.data;
+};
+
+export const listAdminSubjectMaterials = async (
+  subjectId: string
+): Promise<ConceptMaterialResponse[]> => {
+  const response = await api.get(`${BASE_PATH}/admin/subjects/${subjectId}/materials`);
+  return response.data;
+};
+
+export const createAdminJob = async (
+  payload: AdminMaterialJobCreate
+): Promise<MaterialJobStatusResponse> => {
+  const response = await api.post(`${BASE_PATH}/admin/material-jobs`, payload);
+  return response.data;
+};
+
+export const getJobStatus = async (jobId: string): Promise<MaterialJobStatusResponse> => {
+  const response = await api.get(`${BASE_PATH}/admin/material-jobs/${jobId}`);
+  return response.data;
+};
+
+export const approveJob = async (
+  jobId: string,
+  payload: AdminMaterialApproveRequest
+): Promise<MaterialJobStatusResponse> => {
+  const response = await api.post(`${BASE_PATH}/admin/material-jobs/${jobId}/approve`, payload);
+  return response.data;
+};
+
+export const publishSubject = async (subjectId: string): Promise<SubjectResponse> => {
+  const response = await api.post(`${BASE_PATH}/admin/subjects/${subjectId}/publish`, {});
+  return response.data;
+};
+
+export const listPublishedSubjects = async (): Promise<SubjectResponse[]> => {
+  const response = await api.get(`${BASE_PATH}/student/subjects`);
+  return response.data;
+};
+
+export const listPublishedConcepts = async (subjectId: string) => {
+  const response = await api.get(`${BASE_PATH}/student/subjects/${subjectId}/concepts`);
+  return response.data as SubjectResponse["concepts"];
+};
+
+export const listPublishedMaterials = async (
+  subjectId: string
+): Promise<ConceptMaterialResponse[]> => {
+  const response = await api.get(`${BASE_PATH}/student/subjects/${subjectId}/materials`);
+  return response.data;
+};
+
+const downloadBlob = (data: Blob, filename: string) => {
+  const url = window.URL.createObjectURL(data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+export const downloadAdminJobZip = async (jobId: string) => {
+  const response = await api.get(`${BASE_PATH}/admin/material-jobs/${jobId}/download.zip`, {
+    responseType: "blob"
+  });
+  downloadBlob(response.data, `study-material-${jobId}.zip`);
+};
+
+export const downloadAdminJobArtifact = async (jobId: string, artifactName: string) => {
+  const response = await api.get(`${BASE_PATH}/admin/material-jobs/${jobId}/artifacts/${artifactName}`, {
+    responseType: "blob"
+  });
+  downloadBlob(response.data, `${artifactName}-${jobId}`);
+};
+
+export const downloadAdminConceptArtifact = async (
+  jobId: string,
+  conceptId: string,
+  artifactName: string
+) => {
+  const response = await api.get(
+    `${BASE_PATH}/admin/material-jobs/${jobId}/concepts/${conceptId}/artifacts/${artifactName}`,
+    { responseType: "blob" }
+  );
+  downloadBlob(response.data, `${artifactName}-${conceptId}`);
+};
+
+export const downloadStudentConceptArtifact = async (
+  subjectId: string,
+  conceptId: string,
+  artifactName: string
+) => {
+  const response = await api.get(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/artifacts/${artifactName}`,
+    { responseType: "blob" }
+  );
+  downloadBlob(response.data, `${artifactName}-${conceptId}`);
+};
+
+export const downloadStudentSubjectArtifact = async (subjectId: string, artifactName: string) => {
+  const response = await api.get(`${BASE_PATH}/student/subjects/${subjectId}/artifacts/${artifactName}`, {
+    responseType: "blob"
+  });
+  downloadBlob(response.data, `${artifactName}-${subjectId}`);
+};
+
+export const getStudentFlashcards = async (
+  subjectId: string,
+  conceptId: string
+): Promise<FlashcardItem[]> => {
+  const response = await api.get(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/artifacts/flashcards_json`
+  );
+  const data = response.data;
+  if (Array.isArray(data) && data.length) {
+    const entry = data[0] as { flashcards?: FlashcardItem[] };
+    return Array.isArray(entry.flashcards) ? entry.flashcards : [];
+  }
+  if (data && Array.isArray(data.flashcards)) {
+    return data.flashcards as FlashcardItem[];
+  }
+  return [];
+};
