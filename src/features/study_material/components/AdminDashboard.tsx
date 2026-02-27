@@ -12,12 +12,16 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { PageHeader } from "@/components/common/PageHeader";
 import { JobProgress } from "@/features/study_material/components/JobProgress";
 import {
+  MaterialPreviewModal,
+  type PreviewFileType
+} from "@/features/study_material/components/MaterialPreviewModal";
+import {
   addConceptsBulk,
   approveJob,
   createAdminJob,
   createSubject,
-  downloadAdminConceptArtifact,
   downloadAdminJobZip,
+  fetchAdminConceptArtifact,
   getJobStatus,
   getSubject,
   listAdminSubjectMaterials,
@@ -38,6 +42,7 @@ import {
   saveStoredSubjects,
   StoredSubject
 } from "@/utils/storage";
+
 
 interface ConceptDraft {
   name: string;
@@ -65,6 +70,16 @@ export const AdminDashboard: React.FC = () => {
     grade_level: "",
     description: ""
   });
+
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewMeta, setPreviewMeta] = useState<{
+    title: string;
+    fileName: string;
+    fileType: PreviewFileType;
+  } | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const activeSubject = activeSubjectId ? subjectDetails[activeSubjectId] : undefined;
   const activeJob = activeSubjectId ? jobMap[subjectJobs[activeSubjectId]] : undefined;
@@ -96,6 +111,12 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     saveStoredJobs(subjectJobs);
   }, [subjectJobs]);
+
+  useEffect(() => {
+    setPreviewOpen(false);
+    setPreviewBlob(null);
+    setPreviewError(null);
+  }, [activeSubjectId]);
 
   useEffect(() => {
     if (!subjects.length) {
@@ -292,6 +313,147 @@ export const AdminDashboard: React.FC = () => {
     await downloadAdminJobZip(activeJob.job_id);
   };
 
+  const toSafeFilename = (value: string) => {
+    const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    return slug || "material";
+  };
+
+  const openPreview = async (options: {
+    title: string;
+    fileName: string;
+    fileType: PreviewFileType;
+    fetcher: () => Promise<Blob>;
+  }) => {
+    setPreviewOpen(true);
+    setPreviewMeta({ title: options.title, fileName: options.fileName, fileType: options.fileType });
+    setPreviewBlob(null);
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const blob = await options.fetcher();
+      setPreviewBlob(blob);
+    } catch (err: any) {
+      setPreviewError(err?.response?.data?.detail || "Failed to load preview.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setPreviewOpen(false);
+    setPreviewMeta(null);
+    setPreviewBlob(null);
+    setPreviewLoading(false);
+    setPreviewError(null);
+  };
+
+  const handlePreviewMaterial = async (options: {
+    conceptId: string;
+    conceptName: string;
+    jobId: string;
+    artifactName: string;
+    fileType: PreviewFileType;
+  }) => {
+    if (!options.jobId) {
+      setError("This material is missing a source job. Please regenerate the topic.");
+      return;
+    }
+    const extension =
+      options.fileType === "video"
+        ? options.artifactName.split(".").pop() || "mp4"
+        : options.fileType;
+    const fileName = `${toSafeFilename(options.conceptName)}.${extension}`;
+    await openPreview({
+      title: `${options.conceptName} · ${options.fileType.toUpperCase()}`,
+      fileName,
+      fileType: options.fileType,
+      fetcher: () => fetchAdminConceptArtifact(options.jobId, options.conceptId, options.artifactName)
+    });
+  };
+
+  const getVideoArtifactKeys = (artifactIndex?: ConceptMaterialResponse["artifact_index"]) => {
+    if (!artifactIndex?.extras) {
+      return [];
+    }
+    return Object.keys(artifactIndex.extras).filter((key) =>
+      /video|mp4|webm|mov/i.test(key)
+    );
+  };
+
+  const renderArtifactActions = (options: {
+    conceptId: string;
+    conceptName: string;
+    jobId: string;
+    artifactIndex: ConceptMaterialResponse["artifact_index"];
+  }) => {
+    const videoKeys = getVideoArtifactKeys(options.artifactIndex);
+    const hasPreview =
+      Boolean(options.artifactIndex.pdf) ||
+      Boolean(options.artifactIndex.quick_revision_pdf) ||
+      videoKeys.length > 0;
+
+    if (!hasPreview) {
+      return <span className="muted">No previewable files yet.</span>;
+    }
+
+    return (
+      <div className="inline-actions">
+        {options.artifactIndex.pdf ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() =>
+              handlePreviewMaterial({
+                conceptId: options.conceptId,
+                conceptName: options.conceptName,
+                jobId: options.jobId,
+                artifactName: "pdf",
+                fileType: "pdf"
+              })
+            }
+          >
+            View Study PDF
+          </Button>
+        ) : null}
+        {options.artifactIndex.quick_revision_pdf ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() =>
+              handlePreviewMaterial({
+                conceptId: options.conceptId,
+                conceptName: options.conceptName,
+                jobId: options.jobId,
+                artifactName: "quick_revision_pdf",
+                fileType: "pdf"
+              })
+            }
+          >
+            Quick Revision
+          </Button>
+        ) : null}
+        {videoKeys.map((key, index) => (
+          <Button
+            key={key}
+            size="sm"
+            variant="ghost"
+            onClick={() =>
+              handlePreviewMaterial({
+                conceptId: options.conceptId,
+                conceptName: options.conceptName,
+                jobId: options.jobId,
+                artifactName: key,
+                fileType: "video"
+              })
+            }
+          >
+            {videoKeys.length > 1 ? `Video ${index + 1}` : "Video"}
+          </Button>
+        ))}
+      </div>
+    );
+  };
+
   const renderSubjectList = () => {
     if (!subjects.length) {
       return (
@@ -427,6 +589,11 @@ export const AdminDashboard: React.FC = () => {
             <div className="panel-header">
               <h3>Generated Materials</h3>
             </div>
+            {activeJob?.status === "completed" && activeJob.review_status !== "approved" ? (
+              <div className="review-note">
+                Review the generated materials below before approving.
+              </div>
+            ) : null}
             {activeMaterials && activeMaterials.length ? (
               <div className="material-list">
                 {activeMaterials.map((material) => (
@@ -435,55 +602,37 @@ export const AdminDashboard: React.FC = () => {
                       <h4>{material.concept_name}</h4>
                       <p className="muted">Version {material.version}</p>
                     </div>
-                    <div className="inline-actions">
-                      {activeJob ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            downloadAdminConceptArtifact(
-                              activeJob.job_id,
-                              material.concept_id,
-                              "pdf"
-                            )
-                          }
-                        >
-                          PDF
-                        </Button>
-                      ) : null}
-                      {activeJob ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            downloadAdminConceptArtifact(
-                              activeJob.job_id,
-                              material.concept_id,
-                              "pptx"
-                            )
-                          }
-                        >
-                          PPTX
-                        </Button>
-                      ) : null}
-                      {activeJob ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            downloadAdminConceptArtifact(
-                              activeJob.job_id,
-                              material.concept_id,
-                              "docx"
-                            )
-                          }
-                        >
-                          DOCX
-                        </Button>
-                      ) : null}
-                    </div>
+                    {renderArtifactActions({
+                      conceptId: material.concept_id,
+                      conceptName: material.concept_name,
+                      jobId: material.source_job_id,
+                      artifactIndex: material.artifact_index
+                    })}
                   </div>
                 ))}
+              </div>
+            ) : activeJob?.status === "completed" && activeSubject ? (
+              <div className="material-list">
+                {activeSubject.concepts.map((concept) => {
+                  const artifacts = activeJob.concept_artifacts[concept.concept_id];
+                  if (!artifacts) {
+                    return null;
+                  }
+                  return (
+                    <div key={concept.concept_id} className="material-card">
+                      <div>
+                        <h4>{concept.name}</h4>
+                        <p className="muted">Ready for review</p>
+                      </div>
+                      {renderArtifactActions({
+                        conceptId: concept.concept_id,
+                        conceptName: concept.name,
+                        jobId: activeJob.job_id,
+                        artifactIndex: artifacts
+                      })}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <EmptyState
@@ -597,6 +746,17 @@ export const AdminDashboard: React.FC = () => {
           </Button>
         </div>
       </Modal>
+
+      <MaterialPreviewModal
+        open={previewOpen}
+        title={previewMeta?.title ?? "Material Preview"}
+        fileName={previewMeta?.fileName ?? "material"}
+        fileType={previewMeta?.fileType ?? "pdf"}
+        previewBlob={previewBlob}
+        loading={previewLoading}
+        error={previewError}
+        onClose={handleClosePreview}
+      />
 
       {loading ? (
         <div className="loading-overlay">

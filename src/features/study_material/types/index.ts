@@ -31,13 +31,19 @@ export interface ConceptMaterialResponse {
 }
 
 export interface ArtifactIndex {
-  pptx?: string | null;
-  docx?: string | null;
   pdf?: string | null;
+  quick_revision_pdf?: string | null;
   quiz_json?: string | null;
   flashcards_json?: string | null;
   resources_json?: string | null;
   zip?: string | null;
+  extras?: Record<string, string>;
+}
+
+export interface ResourceItem {
+  title: string;
+  url: string;
+  note?: string;
 }
 
 export interface MaterialJobStatusResponse {

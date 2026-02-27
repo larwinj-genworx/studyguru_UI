@@ -6,6 +6,7 @@ import type {
   ConceptBulkCreate,
   ConceptMaterialResponse,
   MaterialJobStatusResponse,
+  ResourceItem,
   SubjectCreate,
   SubjectResponse
 } from "@/features/study_material/types";
@@ -90,6 +91,11 @@ const downloadBlob = (data: Blob, filename: string) => {
   window.URL.revokeObjectURL(url);
 };
 
+const fetchBlob = async (url: string) => {
+  const response = await api.get(url, { responseType: "blob" });
+  return response.data as Blob;
+};
+
 export const downloadAdminJobZip = async (jobId: string) => {
   const response = await api.get(`${BASE_PATH}/admin/material-jobs/${jobId}/download.zip`, {
     responseType: "blob"
@@ -116,6 +122,16 @@ export const downloadAdminConceptArtifact = async (
   downloadBlob(response.data, `${artifactName}-${conceptId}`);
 };
 
+export const fetchAdminConceptArtifact = async (
+  jobId: string,
+  conceptId: string,
+  artifactName: string
+) => {
+  return fetchBlob(
+    `${BASE_PATH}/admin/material-jobs/${jobId}/concepts/${conceptId}/artifacts/${artifactName}`
+  );
+};
+
 export const downloadStudentConceptArtifact = async (
   subjectId: string,
   conceptId: string,
@@ -128,11 +144,25 @@ export const downloadStudentConceptArtifact = async (
   downloadBlob(response.data, `${artifactName}-${conceptId}`);
 };
 
+export const fetchStudentConceptArtifact = async (
+  subjectId: string,
+  conceptId: string,
+  artifactName: string
+) => {
+  return fetchBlob(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/artifacts/${artifactName}`
+  );
+};
+
 export const downloadStudentSubjectArtifact = async (subjectId: string, artifactName: string) => {
   const response = await api.get(`${BASE_PATH}/student/subjects/${subjectId}/artifacts/${artifactName}`, {
     responseType: "blob"
   });
   downloadBlob(response.data, `${artifactName}-${subjectId}`);
+};
+
+export const fetchStudentSubjectArtifact = async (subjectId: string, artifactName: string) => {
+  return fetchBlob(`${BASE_PATH}/student/subjects/${subjectId}/artifacts/${artifactName}`);
 };
 
 export const getStudentFlashcards = async (
@@ -149,6 +179,24 @@ export const getStudentFlashcards = async (
   }
   if (data && Array.isArray(data.flashcards)) {
     return data.flashcards as FlashcardItem[];
+  }
+  return [];
+};
+
+export const getStudentResources = async (
+  subjectId: string,
+  conceptId: string
+): Promise<ResourceItem[]> => {
+  const response = await api.get(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/artifacts/resources_json`
+  );
+  const data = response.data;
+  if (Array.isArray(data) && data.length) {
+    const entry = data[0] as { resources?: ResourceItem[] };
+    return Array.isArray(entry.resources) ? entry.resources : [];
+  }
+  if (data && Array.isArray(data.resources)) {
+    return data.resources as ResourceItem[];
   }
   return [];
 };

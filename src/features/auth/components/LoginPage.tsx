@@ -36,6 +36,7 @@ export const LoginPage: React.FC = () => {
     email: STUDENT_CREDENTIALS.email,
     password: ""
   });
+  const [activeRole, setActiveRole] = useState<"admin" | "student">("admin");
 
   const handleAdminSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -63,6 +64,15 @@ export const LoginPage: React.FC = () => {
     }
   };
 
+  const isAdmin = activeRole === "admin";
+  const activeForm = isAdmin ? adminForm : studentForm;
+  const setActiveForm = isAdmin ? setAdminForm : setStudentForm;
+  const roleTitle = isAdmin ? "Admin Login" : "Student Login";
+  const roleDescription = isAdmin
+    ? "Manage syllabi, generate materials, and publish."
+    : "Explore published study materials and downloads.";
+  const roleCta = isAdmin ? "Sign in as Admin" : "Sign in as Student";
+
   return (
     <AuthLayout>
       <div className="login-stack">
@@ -71,62 +81,54 @@ export const LoginPage: React.FC = () => {
           <h2>Sign in to continue</h2>
           <p className="muted">Choose the role that matches your workspace.</p>
         </div>
-        <div className="login-grid">
-          <Card className="lift">
-            <h3>Admin Login</h3>
-            <p className="muted">Manage syllabi, generate materials, and publish.</p>
-            <form onSubmit={handleAdminSubmit} className="form-stack">
-              <Input
-                label="Admin Email"
-                type="email"
-                value={adminForm.email}
-                onChange={(event) =>
-                  setAdminForm((prev) => ({ ...prev, email: event.target.value, error: undefined }))
-                }
-                required
-              />
-              <Input
-                label="Password"
-                type="password"
-                value={adminForm.password}
-                onChange={(event) =>
-                  setAdminForm((prev) => ({ ...prev, password: event.target.value, error: undefined }))
-                }
-                required
-              />
-              {adminForm.error ? <p className="form-error">{adminForm.error}</p> : null}
-              <Button type="submit">Sign in as Admin</Button>
-            </form>
-          </Card>
-          <Card className="lift">
-            <h3>Student Login</h3>
-            <p className="muted">Explore published study materials and downloads.</p>
-            <form onSubmit={handleStudentSubmit} className="form-stack">
-              <Input
-                label="Student Email"
-                type="email"
-                value={studentForm.email}
-                onChange={(event) =>
-                  setStudentForm((prev) => ({ ...prev, email: event.target.value, error: undefined }))
-                }
-                required
-              />
-              <Input
-                label="Password"
-                type="password"
-                value={studentForm.password}
-                onChange={(event) =>
-                  setStudentForm((prev) => ({ ...prev, password: event.target.value, error: undefined }))
-                }
-                required
-              />
-              {studentForm.error ? <p className="form-error">{studentForm.error}</p> : null}
-              <Button type="submit" variant="secondary">
-                Sign in as Student
-              </Button>
-            </form>
-          </Card>
-        </div>
+        <Card className="login-card">
+          <div className="login-switch" role="tablist" aria-label="Select login role">
+            <button
+              type="button"
+              className={isAdmin ? "active" : ""}
+              onClick={() => setActiveRole("admin")}
+              aria-pressed={isAdmin}
+            >
+              Admin
+            </button>
+            <button
+              type="button"
+              className={!isAdmin ? "active" : ""}
+              onClick={() => setActiveRole("student")}
+              aria-pressed={!isAdmin}
+            >
+              Student
+            </button>
+          </div>
+          <div className="login-card-header">
+            <h3>{roleTitle}</h3>
+            <p className="muted">{roleDescription}</p>
+          </div>
+          <form onSubmit={isAdmin ? handleAdminSubmit : handleStudentSubmit} className="form-stack">
+            <Input
+              label={isAdmin ? "Admin Email" : "Student Email"}
+              type="email"
+              value={activeForm.email}
+              onChange={(event) =>
+                setActiveForm((prev) => ({ ...prev, email: event.target.value, error: undefined }))
+              }
+              required
+            />
+            <Input
+              label="Password"
+              type="password"
+              value={activeForm.password}
+              onChange={(event) =>
+                setActiveForm((prev) => ({ ...prev, password: event.target.value, error: undefined }))
+              }
+              required
+            />
+            {activeForm.error ? <p className="form-error">{activeForm.error}</p> : null}
+            <Button type="submit" variant={isAdmin ? "primary" : "secondary"}>
+              {roleCta}
+            </Button>
+          </form>
+        </Card>
       </div>
     </AuthLayout>
   );

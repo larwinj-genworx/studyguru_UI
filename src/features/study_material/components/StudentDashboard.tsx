@@ -9,9 +9,15 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Modal } from "@/components/ui/Modal";
 import {
-  downloadStudentConceptArtifact,
+  MaterialPreviewModal,
+  type PreviewFileType
+} from "@/features/study_material/components/MaterialPreviewModal";
+import {
   downloadStudentSubjectArtifact,
+  fetchStudentConceptArtifact,
+  fetchStudentSubjectArtifact,
   getStudentFlashcards,
+  getStudentResources,
   listPublishedConcepts,
   listPublishedMaterials,
   listPublishedSubjects
@@ -20,6 +26,7 @@ import type {
   ConceptMaterialResponse,
   ConceptResponse,
   FlashcardItem,
+  ResourceItem,
   SubjectResponse
 } from "@/features/study_material/types";
 
@@ -40,6 +47,29 @@ export const StudentDashboard: React.FC = () => {
   } | null>(null);
   const [flashcardLoading, setFlashcardLoading] = useState(false);
   const [flashcardError, setFlashcardError] = useState<string | null>(null);
+
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const [resourcesMeta, setResourcesMeta] = useState<{
+    conceptId: string;
+    conceptName: string;
+  } | null>(null);
+  const [resources, setResources] = useState<ResourceItem[]>([]);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
+  const [resourcesError, setResourcesError] = useState<string | null>(null);
+  const [videoPreview, setVideoPreview] = useState<{
+    title: string;
+    embedUrl: string;
+  } | null>(null);
+
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewMeta, setPreviewMeta] = useState<{
+    title: string;
+    fileName: string;
+    fileType: PreviewFileType;
+  } | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchSubjects = async () => {
@@ -87,6 +117,14 @@ export const StudentDashboard: React.FC = () => {
     setFlashcardIndex(0);
     setFlashcardFlipped(false);
     setFlashcardError(null);
+    setResourcesOpen(false);
+    setResourcesMeta(null);
+    setResources([]);
+    setResourcesError(null);
+    setVideoPreview(null);
+    setPreviewOpen(false);
+    setPreviewBlob(null);
+    setPreviewError(null);
   }, [activeSubjectId]);
 
   const activeSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
@@ -126,11 +164,137 @@ export const StudentDashboard: React.FC = () => {
     setFlashcardError(null);
   };
 
+  const toYouTubeEmbed = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname.includes("youtu.be")) {
+        const id = parsed.pathname.replace("/", "");
+        return id ? `https://www.youtube.com/embed/${id}` : null;
+      }
+      if (parsed.hostname.includes("youtube.com")) {
+        const id = parsed.searchParams.get("v");
+        return id ? `https://www.youtube.com/embed/${id}` : null;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+
+  const handleOpenResources = async (concept: ConceptResponse) => {
+    if (!activeSubjectId) {
+      return;
+    }
+    setResourcesOpen(true);
+    setResourcesMeta({ conceptId: concept.concept_id, conceptName: concept.name });
+    setResourcesLoading(true);
+    setResourcesError(null);
+    setResources([]);
+    try {
+      const items = await getStudentResources(activeSubjectId, concept.concept_id);
+      setResources(items);
+    } catch (err: any) {
+      setResourcesError(err?.response?.data?.detail || "Failed to load resources.");
+    } finally {
+      setResourcesLoading(false);
+    }
+  };
+
+  const handleCloseResources = () => {
+    setResourcesOpen(false);
+    setResourcesMeta(null);
+    setResources([]);
+    setResourcesError(null);
+  };
+
+  const handleOpenVideo = (resource: ResourceItem) => {
+    const embedUrl = toYouTubeEmbed(resource.url);
+    if (!embedUrl) {
+      window.open(resource.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setVideoPreview({ title: resource.title, embedUrl });
+  };
+
+  const handleCloseVideo = () => {
+    setVideoPreview(null);
+  };
+
+  const toSafeFilename = (value: string) => {
+    const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    return slug || "material";
+  };
+
+  const toSafeLabel = (value: string) => {
+    const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    return slug || "material";
+  };
+
+  const openPreview = async (options: {
+    title: string;
+    fileName: string;
+    fileType: PreviewFileType;
+    fetcher: () => Promise<Blob>;
+  }) => {
+    setPreviewOpen(true);
+    setPreviewMeta({ title: options.title, fileName: options.fileName, fileType: options.fileType });
+    setPreviewBlob(null);
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const blob = await options.fetcher();
+      setPreviewBlob(blob);
+    } catch (err: any) {
+      setPreviewError(err?.response?.data?.detail || "Failed to load preview.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setPreviewOpen(false);
+    setPreviewMeta(null);
+    setPreviewBlob(null);
+    setPreviewLoading(false);
+    setPreviewError(null);
+  };
+
+  const handlePreviewSubjectArtifact = async (artifactName: string, label: string) => {
+    if (!activeSubjectId || !activeSubject) {
+      return;
+    }
+    const fileName = `${toSafeFilename(activeSubject.name)}-${toSafeLabel(label)}.pdf`;
+    await openPreview({
+      title: `${activeSubject.name} · ${label}`,
+      fileName,
+      fileType: "pdf",
+      fetcher: () => fetchStudentSubjectArtifact(activeSubjectId, artifactName)
+    });
+  };
+
+  const handlePreviewConceptArtifact = async (
+    concept: ConceptResponse,
+    artifactName: string,
+    label: string
+  ) => {
+    if (!activeSubjectId) {
+      return;
+    }
+    const fileName = `${toSafeFilename(concept.name)}-${toSafeLabel(label)}.pdf`;
+    await openPreview({
+      title: `${concept.name} · ${label}`,
+      fileName,
+      fileType: "pdf",
+      fetcher: () =>
+        fetchStudentConceptArtifact(activeSubjectId, concept.concept_id, artifactName)
+    });
+  };
+
   return (
     <DashboardLayout title="Student Library" subtitle="Explore published study materials.">
       <PageHeader
         title="Your Study Library"
-        subtitle="Browse published syllabi, open flashcards, and download concept materials."
+        subtitle="Browse published syllabi, preview materials, open flashcards, and download when needed."
       />
       {error ? <div className="alert danger">{error}</div> : null}
 
@@ -185,23 +349,18 @@ export const StudentDashboard: React.FC = () => {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => downloadStudentSubjectArtifact(activeSubjectId!, "pdf")}
+                    onClick={() => handlePreviewSubjectArtifact("pdf", "Study Material")}
                   >
-                    Subject PDF
+                    View Study PDF
                   </Button>
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => downloadStudentSubjectArtifact(activeSubjectId!, "pptx")}
+                    onClick={() =>
+                      handlePreviewSubjectArtifact("quick_revision_pdf", "Quick Revision")
+                    }
                   >
-                    Subject PPTX
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => downloadStudentSubjectArtifact(activeSubjectId!, "docx")}
-                  >
-                    Subject DOCX
+                    Quick Revision
                   </Button>
                   <Button
                     size="sm"
@@ -246,40 +405,34 @@ export const StudentDashboard: React.FC = () => {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() =>
-                                    downloadStudentConceptArtifact(
-                                      activeSubjectId!,
-                                      concept.concept_id,
-                                      "pdf"
+                                    handlePreviewConceptArtifact(
+                                      concept,
+                                      "pdf",
+                                      "Study Material"
                                     )
                                   }
                                 >
-                                  PDF
+                                  View Study PDF
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="ghost"
                                   onClick={() =>
-                                    downloadStudentConceptArtifact(
-                                      activeSubjectId!,
-                                      concept.concept_id,
-                                      "pptx"
+                                    handlePreviewConceptArtifact(
+                                      concept,
+                                      "quick_revision_pdf",
+                                      "Quick Revision"
                                     )
                                   }
                                 >
-                                  PPTX
+                                  Quick Revision
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() =>
-                                    downloadStudentConceptArtifact(
-                                      activeSubjectId!,
-                                      concept.concept_id,
-                                      "docx"
-                                    )
-                                  }
+                                  onClick={() => handleOpenResources(concept)}
                                 >
-                                  DOCX
+                                  Resources
                                 </Button>
                               </>
                             ) : (
@@ -381,6 +534,72 @@ export const StudentDashboard: React.FC = () => {
           />
         )}
       </Modal>
+
+      <Modal
+        open={resourcesOpen}
+        title={resourcesMeta ? `Resources: ${resourcesMeta.conceptName}` : "Resources"}
+        onClose={handleCloseResources}
+      >
+        {resourcesLoading ? (
+          <div className="flashcard-loading">
+            <LoadingSpinner />
+          </div>
+        ) : resourcesError ? (
+          <div className="alert danger">{resourcesError}</div>
+        ) : resources.length ? (
+          <div className="resource-list">
+            {resources.map((resource, index) => (
+              <div key={`${resource.url}-${index}`} className="resource-card">
+                <div>
+                  <p className="resource-title">{resource.title}</p>
+                  {resource.note ? <p className="muted">{resource.note}</p> : null}
+                </div>
+                <div className="inline-actions">
+                  <Button size="sm" variant="ghost" onClick={() => handleOpenVideo(resource)}>
+                    {toYouTubeEmbed(resource.url) ? "Watch Video" : "Open Link"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No resources yet"
+            description="Resource links will appear once they are curated."
+          />
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(videoPreview)}
+        title={videoPreview?.title ?? "Video"}
+        onClose={handleCloseVideo}
+        className="viewer-modal"
+        bodyClassName="viewer-body"
+      >
+        {videoPreview ? (
+          <div className="material-viewer">
+            <iframe
+              className="material-frame"
+              src={videoPreview.embedUrl}
+              title={videoPreview.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        ) : null}
+      </Modal>
+
+      <MaterialPreviewModal
+        open={previewOpen}
+        title={previewMeta?.title ?? "Material Preview"}
+        fileName={previewMeta?.fileName ?? "material"}
+        fileType={previewMeta?.fileType ?? "pdf"}
+        previewBlob={previewBlob}
+        loading={previewLoading}
+        error={previewError}
+        onClose={handleClosePreview}
+      />
     </DashboardLayout>
   );
 };
