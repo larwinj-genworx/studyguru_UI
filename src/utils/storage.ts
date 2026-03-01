@@ -1,23 +1,24 @@
 ﻿import type { AuthState } from "@/types";
 
 const AUTH_KEY = "sg_auth";
-const SUBJECT_KEY = "sg_admin_subjects";
-const JOB_KEY = "sg_admin_jobs";
 
 export const loadAuthState = (): AuthState => {
   try {
     const raw = localStorage.getItem(AUTH_KEY);
     if (!raw) {
-      return { isAuthenticated: false, role: null, email: null };
+      return { isAuthenticated: false, role: null, email: null, userId: null, accessToken: null };
     }
     const parsed = JSON.parse(raw) as AuthState;
+    const accessToken = parsed.accessToken ?? null;
     return {
-      isAuthenticated: Boolean(parsed.isAuthenticated),
+      isAuthenticated: Boolean(parsed.isAuthenticated) && Boolean(accessToken),
       role: parsed.role ?? null,
-      email: parsed.email ?? null
+      email: parsed.email ?? null,
+      userId: parsed.userId ?? null,
+      accessToken
     };
   } catch {
-    return { isAuthenticated: false, role: null, email: null };
+    return { isAuthenticated: false, role: null, email: null, userId: null, accessToken: null };
   }
 };
 
@@ -27,45 +28,4 @@ export const saveAuthState = (state: AuthState): void => {
 
 export const clearAuthState = (): void => {
   localStorage.removeItem(AUTH_KEY);
-};
-
-export interface StoredSubject {
-  subject_id: string;
-  name: string;
-  grade_level: string;
-  description?: string | null;
-}
-
-export const loadStoredSubjects = (): StoredSubject[] => {
-  try {
-    const raw = localStorage.getItem(SUBJECT_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw) as StoredSubject[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-export const saveStoredSubjects = (subjects: StoredSubject[]): void => {
-  localStorage.setItem(SUBJECT_KEY, JSON.stringify(subjects));
-};
-
-export const loadStoredJobs = (): Record<string, string> => {
-  try {
-    const raw = localStorage.getItem(JOB_KEY);
-    if (!raw) {
-      return {};
-    }
-    const parsed = JSON.parse(raw) as Record<string, string>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-};
-
-export const saveStoredJobs = (jobs: Record<string, string>): void => {
-  localStorage.setItem(JOB_KEY, JSON.stringify(jobs));
 };

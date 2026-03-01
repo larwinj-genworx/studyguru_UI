@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { RequireAuth } from "@/features/auth/components/RequireAuth";
 import { LoginPage } from "@/features/auth/components/LoginPage";
+import { SignupPage } from "@/features/auth/components/SignupPage";
 import { AdminDashboard } from "@/features/study_material/components/AdminDashboard";
 import { StudentDashboard } from "@/features/study_material/components/StudentDashboard";
 import { NotFound } from "@/components/common/NotFound";
@@ -19,6 +20,10 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/login"
         element={isAuthenticated ? <Navigate to={defaultPath} replace /> : <LoginPage />}
+      />
+      <Route
+        path="/signup"
+        element={isAuthenticated ? <Navigate to={defaultPath} replace /> : <SignupPage />}
       />
       <Route
         path="/admin"

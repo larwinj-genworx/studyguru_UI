@@ -4,4 +4,6 @@ export interface AuthState {
   isAuthenticated: boolean;
   role: UserRole;
   email: string | null;
+  userId: string | null;
+  accessToken: string | null;
 }

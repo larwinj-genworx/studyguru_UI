@@ -24,6 +24,8 @@ import {
   fetchAdminConceptArtifact,
   getJobStatus,
   getSubject,
+  listAdminJobs,
+  listAdminSubjects,
   listAdminSubjectMaterials,
   publishSubject
 } from "@/features/study_material/services/studyMaterialService";
@@ -35,13 +37,6 @@ import type {
   SubjectCreate,
   SubjectResponse
 } from "@/features/study_material/types";
-import {
-  loadStoredJobs,
-  loadStoredSubjects,
-  saveStoredJobs,
-  saveStoredSubjects,
-  StoredSubject
-} from "@/utils/storage";
 
 
 interface ConceptDraft {
@@ -52,14 +47,11 @@ interface ConceptDraft {
 const emptyConcept: ConceptDraft = { name: "", description: "" };
 
 export const AdminDashboard: React.FC = () => {
-  const [subjects, setSubjects] = useState<StoredSubject[]>(loadStoredSubjects());
-  const [subjectDetails, setSubjectDetails] = useState<Record<string, SubjectResponse>>({});
+  const [subjects, setSubjects] = useState<SubjectResponse[]>([]);
   const [materialsMap, setMaterialsMap] = useState<Record<string, ConceptMaterialResponse[]>>({});
   const [jobMap, setJobMap] = useState<Record<string, MaterialJobStatusResponse>>({});
-  const [subjectJobs, setSubjectJobs] = useState<Record<string, string>>(loadStoredJobs());
-  const [activeSubjectId, setActiveSubjectId] = useState<string | null>(
-    subjects[0]?.subject_id ?? null
-  );
+  const [subjectJobs, setSubjectJobs] = useState<Record<string, string>>({});
+  const [activeSubjectId, setActiveSubjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSubjectModal, setShowSubjectModal] = useState(false);
@@ -81,7 +73,9 @@ export const AdminDashboard: React.FC = () => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
-  const activeSubject = activeSubjectId ? subjectDetails[activeSubjectId] : undefined;
+  const activeSubject = activeSubjectId
+    ? subjects.find((subject) => subject.subject_id === activeSubjectId)
+    : undefined;
   const activeJob = activeSubjectId ? jobMap[subjectJobs[activeSubjectId]] : undefined;
   const activeMaterials = activeSubjectId ? materialsMap[activeSubjectId] : undefined;
 
@@ -105,39 +99,29 @@ export const AdminDashboard: React.FC = () => {
   }, [activeSubject]);
 
   useEffect(() => {
-    saveStoredSubjects(subjects);
-  }, [subjects]);
-
-  useEffect(() => {
-    saveStoredJobs(subjectJobs);
-  }, [subjectJobs]);
-
-  useEffect(() => {
     setPreviewOpen(false);
     setPreviewBlob(null);
     setPreviewError(null);
   }, [activeSubjectId]);
 
   useEffect(() => {
-    if (!subjects.length) {
-      return;
-    }
     const fetchSubjects = async () => {
-      const updates: Record<string, SubjectResponse> = {};
-      for (const subject of subjects) {
-        try {
-          const response = await getSubject(subject.subject_id);
-          updates[subject.subject_id] = response;
-        } catch (err) {
-          // ignore fetch errors for now
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await listAdminSubjects();
+        setSubjects(response);
+        if (response.length) {
+          setActiveSubjectId((current) => current ?? response[0].subject_id);
         }
-      }
-      if (Object.keys(updates).length) {
-        setSubjectDetails((prev) => ({ ...prev, ...updates }));
+      } catch (err: any) {
+        setError(err?.response?.data?.detail || "Failed to load syllabi.");
+      } finally {
+        setLoading(false);
       }
     };
     fetchSubjects();
-  }, [subjects]);
+  }, []);
 
   useEffect(() => {
     if (!activeSubjectId) {
@@ -153,26 +137,38 @@ export const AdminDashboard: React.FC = () => {
   }, [activeSubjectId, materialsMap]);
 
   useEffect(() => {
-    const allJobIds = Object.values(subjectJobs);
-    if (!allJobIds.length) {
+    if (!subjects.length) {
+      setJobMap({});
+      setSubjectJobs({});
       return;
     }
-    const bootstrapJobs = async () => {
-      const updates: Record<string, MaterialJobStatusResponse> = {};
-      for (const jobId of allJobIds) {
-        try {
-          const status = await getJobStatus(jobId);
-          updates[jobId] = status;
-        } catch {
-          // ignore missing job status
-        }
-      }
-      if (Object.keys(updates).length) {
-        setJobMap((prev) => ({ ...prev, ...updates }));
+    const fetchJobs = async () => {
+      try {
+        const jobs = await listAdminJobs();
+        const updates: Record<string, MaterialJobStatusResponse> = {};
+        const latestBySubject: Record<string, MaterialJobStatusResponse> = {};
+        jobs.forEach((job) => {
+          updates[job.job_id] = job;
+          const current = latestBySubject[job.subject_id];
+          if (!current || new Date(job.created_at) > new Date(current.created_at)) {
+            latestBySubject[job.subject_id] = job;
+          }
+        });
+        setJobMap(updates);
+        setSubjectJobs(
+          Object.fromEntries(
+            Object.entries(latestBySubject).map(([subjectId, job]) => [
+              subjectId,
+              job.job_id
+            ])
+          )
+        );
+      } catch {
+        // ignore fetch errors
       }
     };
-    bootstrapJobs();
-  }, [subjectJobs]);
+    fetchJobs();
+  }, [subjects]);
 
   useEffect(() => {
     const activeJobs = Object.values(jobMap).filter(
@@ -201,14 +197,7 @@ export const AdminDashboard: React.FC = () => {
     setError(null);
     try {
       const response = await createSubject(subjectForm);
-      const newEntry: StoredSubject = {
-        subject_id: response.subject_id,
-        name: response.name,
-        grade_level: response.grade_level,
-        description: response.description
-      };
-      setSubjects((prev) => [newEntry, ...prev]);
-      setSubjectDetails((prev) => ({ ...prev, [response.subject_id]: response }));
+      setSubjects((prev) => [response, ...prev]);
       setActiveSubjectId(response.subject_id);
       setShowSubjectModal(false);
       setSubjectForm({ name: "", grade_level: "", description: "" });
@@ -239,7 +228,11 @@ export const AdminDashboard: React.FC = () => {
         return;
       }
       const response = await addConceptsBulk(activeSubjectId, payload);
-      setSubjectDetails((prev) => ({ ...prev, [activeSubjectId]: response }));
+      setSubjects((prev) =>
+        prev.map((subject) =>
+          subject.subject_id === activeSubjectId ? response : subject
+        )
+      );
       setShowConceptModal(false);
       setConceptDrafts([{ ...emptyConcept }]);
     } catch (err: any) {
@@ -283,6 +276,12 @@ export const AdminDashboard: React.FC = () => {
       setJobMap((prev) => ({ ...prev, [activeJob.job_id]: response }));
       const materials = await listAdminSubjectMaterials(activeJob.subject_id);
       setMaterialsMap((prev) => ({ ...prev, [activeJob.subject_id]: materials }));
+      const refreshed = await getSubject(activeJob.subject_id);
+      setSubjects((prev) =>
+        prev.map((subject) =>
+          subject.subject_id === activeJob.subject_id ? refreshed : subject
+        )
+      );
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Approval failed.");
     } finally {
@@ -298,7 +297,11 @@ export const AdminDashboard: React.FC = () => {
     setError(null);
     try {
       const response = await publishSubject(activeSubjectId);
-      setSubjectDetails((prev) => ({ ...prev, [activeSubjectId]: response }));
+      setSubjects((prev) =>
+        prev.map((subject) =>
+          subject.subject_id === activeSubjectId ? response : subject
+        )
+      );
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Publish failed.");
     } finally {

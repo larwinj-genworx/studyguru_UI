@@ -10,9 +10,9 @@ export const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const auth = loadAuthState();
-  if (auth.role) {
+  if (auth.accessToken) {
     config.headers = config.headers || {};
-    config.headers["X-Role"] = auth.role;
+    config.headers.Authorization = `Bearer ${auth.accessToken}`;
   }
   return config;
 });

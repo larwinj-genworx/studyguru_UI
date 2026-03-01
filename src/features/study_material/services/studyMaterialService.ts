@@ -38,6 +38,19 @@ export const listAdminSubjectMaterials = async (
   return response.data;
 };
 
+export const listAdminSubjects = async (): Promise<SubjectResponse[]> => {
+  const response = await api.get(`${BASE_PATH}/admin/subjects`);
+  return response.data;
+};
+
+export const listAdminJobs = async (
+  subjectId?: string
+): Promise<MaterialJobStatusResponse[]> => {
+  const query = subjectId ? `?subject_id=${subjectId}` : "";
+  const response = await api.get(`${BASE_PATH}/admin/material-jobs${query}`);
+  return response.data;
+};
+
 export const createAdminJob = async (
   payload: AdminMaterialJobCreate
 ): Promise<MaterialJobStatusResponse> => {
