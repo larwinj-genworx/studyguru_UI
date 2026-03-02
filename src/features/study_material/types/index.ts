@@ -30,6 +30,67 @@ export interface ConceptMaterialResponse {
   published_at?: string | null;
 }
 
+export interface LearningSection {
+  id: string;
+  title: string;
+  level: number;
+  blocks: LearningBlock[];
+  children?: LearningSection[];
+}
+
+export type LearningBlock =
+  | { type: "paragraph"; text: string }
+  | { type: "list"; style: "bullet" | "number"; items: string[] }
+  | {
+      type: "formula";
+      formula: string;
+      variables?: { symbol: string; meaning: string }[];
+      explanation?: string;
+      example?: string;
+    }
+  | { type: "code"; language?: string; code: string }
+  | {
+      type: "callout";
+      variant: "note" | "warning" | "example" | "takeaway" | "highlight";
+      title?: string;
+      content: string[] | string;
+    }
+  | {
+      type: "example";
+      title?: string;
+      steps?: string[];
+      result?: string;
+    };
+
+export interface LearningContent {
+  metadata: Record<string, any>;
+  highlights: string[];
+  sections: LearningSection[];
+}
+
+export interface LearningContentResponse {
+  concept_id: string;
+  concept_name: string;
+  subject_id: string;
+  subject_name: string;
+  grade_level: string;
+  lifecycle_status: "draft" | "approved" | "published" | "unavailable";
+  version: number;
+  generated_at: string;
+  approved_at?: string | null;
+  published_at?: string | null;
+  content_schema_version?: string | null;
+  content: LearningContent;
+}
+
+export interface ConceptBookmarkResponse {
+  concept_id: string;
+  concept_name: string;
+  subject_id: string;
+  subject_name: string;
+  created_at: string;
+}
+
 export interface ArtifactIndex {
   pdf?: string | null;
   quick_revision_pdf?: string | null;

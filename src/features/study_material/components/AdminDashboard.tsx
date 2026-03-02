@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { Button } from "@/components/ui/Button";
@@ -27,7 +28,8 @@ import {
   listAdminJobs,
   listAdminSubjects,
   listAdminSubjectMaterials,
-  publishSubject
+  publishSubject,
+  unpublishSubject
 } from "@/features/study_material/services/studyMaterialService";
 import type {
   AdminMaterialJobCreate,
@@ -72,6 +74,7 @@ export const AdminDashboard: React.FC = () => {
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const activeSubject = activeSubjectId
     ? subjects.find((subject) => subject.subject_id === activeSubjectId)
@@ -303,6 +306,26 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleUnpublishSubject = async () => {
+    if (!activeSubjectId) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await unpublishSubject(activeSubjectId);
+      setSubjects((prev) =>
+        prev.map((subject) =>
+          subject.subject_id === activeSubjectId ? response : subject
+        )
+      );
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Unpublish failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDownloadBundle = async () => {
     if (!activeJob) {
       return;
@@ -361,7 +384,7 @@ export const AdminDashboard: React.FC = () => {
         : options.fileType;
     const fileName = `${toSafeFilename(options.conceptName)}.${extension}`;
     await openPreview({
-      title: `${options.conceptName} · ${options.fileType.toUpperCase()}`,
+      title: `${options.conceptName} - ${options.fileType.toUpperCase()}`,
       fileName,
       fileType: options.fileType,
       fetcher: () => fetchAdminConceptArtifact(options.jobId, options.conceptId, options.artifactName)
@@ -388,13 +411,35 @@ export const AdminDashboard: React.FC = () => {
       Boolean(options.artifactIndex.pdf) ||
       Boolean(options.artifactIndex.quick_revision_pdf) ||
       videoKeys.length > 0;
-
     if (!hasPreview) {
-      return <span className="muted">No previewable files yet.</span>;
+      return (
+        <div className="inline-actions">
+          {activeSubjectId ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => navigate(`/learn/${activeSubjectId}/${options.conceptId}`)}
+            >
+              Open Learning Page
+            </Button>
+          ) : null}
+          <span className="muted">No previewable files yet.</span>
+        </div>
+      );
     }
+
 
     return (
       <div className="inline-actions">
+        {activeSubjectId ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => navigate(`/learn/${activeSubjectId}/${options.conceptId}`)}
+          >
+            Open Learning Page
+          </Button>
+        ) : null}
         {options.artifactIndex.pdf ? (
           <Button
             size="sm"
@@ -583,6 +628,13 @@ export const AdminDashboard: React.FC = () => {
                     </Button>
                   </div>
                 )}
+                {activeSubject.published ? (
+                  <div className="inline-actions">
+                    <Button variant="ghost" onClick={handleUnpublishSubject}>
+                      Unpublish
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </Card>
           )}
@@ -768,3 +820,4 @@ export const AdminDashboard: React.FC = () => {
     </DashboardLayout>
   );
 };
+

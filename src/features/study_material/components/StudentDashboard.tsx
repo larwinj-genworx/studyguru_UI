@@ -1,9 +1,11 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/common/EmptyState";
 import { PageHeader } from "@/components/common/PageHeader";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
@@ -19,11 +21,15 @@ import {
   getStudentFlashcards,
   getStudentResources,
   listPublishedConcepts,
+  listStudentBookmarks,
+  addStudentBookmark,
+  removeStudentBookmark,
   listPublishedMaterials,
   listPublishedSubjects
 } from "@/features/study_material/services/studyMaterialService";
 import type {
   ConceptMaterialResponse,
+  ConceptBookmarkResponse,
   ConceptResponse,
   FlashcardItem,
   ResourceItem,
@@ -37,6 +43,10 @@ export const StudentDashboard: React.FC = () => {
   const [materials, setMaterials] = useState<ConceptMaterialResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [bookmarks, setBookmarks] = useState<ConceptBookmarkResponse[]>([]);
+  const navigate = useNavigate();
+
 
   const [flashcards, setFlashcards] = useState<FlashcardItem[]>([]);
   const [flashcardIndex, setFlashcardIndex] = useState(0);
@@ -112,6 +122,15 @@ export const StudentDashboard: React.FC = () => {
   }, [activeSubjectId]);
 
   useEffect(() => {
+    if (!activeSubjectId) {
+      return;
+    }
+    listStudentBookmarks(activeSubjectId)
+      .then((items) => setBookmarks(items))
+      .catch(() => setBookmarks([]));
+  }, [activeSubjectId]);
+
+  useEffect(() => {
     setFlashcardMeta(null);
     setFlashcards([]);
     setFlashcardIndex(0);
@@ -125,6 +144,8 @@ export const StudentDashboard: React.FC = () => {
     setPreviewOpen(false);
     setPreviewBlob(null);
     setPreviewError(null);
+    setSearchQuery("");
+    setBookmarks([]);
   }, [activeSubjectId]);
 
   const activeSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
@@ -134,7 +155,54 @@ export const StudentDashboard: React.FC = () => {
     return map;
   }, [materials]);
 
+  const bookmarkedIds = useMemo(
+    () => new Set(bookmarks.map((bookmark) => bookmark.concept_id)),
+    [bookmarks]
+  );
+
+  const filteredConcepts = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return concepts;
+    }
+    const term = searchQuery.toLowerCase();
+    return concepts.filter((concept) =>
+      concept.name.toLowerCase().includes(term) ||
+      (concept.description || "").toLowerCase().includes(term)
+    );
+  }, [concepts, searchQuery]);
+
   const activeFlashcard = flashcards[flashcardIndex];
+
+  const isBookmarked = (conceptId: string) => bookmarkedIds.has(conceptId);
+
+  const handleToggleBookmark = async (concept: ConceptResponse) => {
+    if (!activeSubjectId) {
+      return;
+    }
+    const marked = bookmarkedIds.has(concept.concept_id);
+    try {
+      if (marked) {
+        await removeStudentBookmark(activeSubjectId, concept.concept_id);
+        setBookmarks((prev) =>
+          prev.filter((item) => item.concept_id !== concept.concept_id)
+        );
+      } else {
+        await addStudentBookmark(activeSubjectId, concept.concept_id);
+        setBookmarks((prev) => [
+          ...prev,
+          {
+            concept_id: concept.concept_id,
+            concept_name: concept.name,
+            subject_id: activeSubjectId,
+            subject_name: activeSubject?.name || "Subject",
+            created_at: new Date().toISOString()
+          }
+        ]);
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Bookmark update failed.");
+    }
+  };
 
   const handleOpenFlashcards = async (concept: ConceptResponse) => {
     if (!activeSubjectId) {
@@ -265,7 +333,7 @@ export const StudentDashboard: React.FC = () => {
     }
     const fileName = `${toSafeFilename(activeSubject.name)}-${toSafeLabel(label)}.pdf`;
     await openPreview({
-      title: `${activeSubject.name} · ${label}`,
+      title: `${activeSubject.name} - ${label}`,
       fileName,
       fileType: "pdf",
       fetcher: () => fetchStudentSubjectArtifact(activeSubjectId, artifactName)
@@ -282,7 +350,7 @@ export const StudentDashboard: React.FC = () => {
     }
     const fileName = `${toSafeFilename(concept.name)}-${toSafeLabel(label)}.pdf`;
     await openPreview({
-      title: `${concept.name} · ${label}`,
+      title: `${concept.name} - ${label}`,
       fileName,
       fileType: "pdf",
       fetcher: () =>
@@ -353,7 +421,7 @@ export const StudentDashboard: React.FC = () => {
                   >
                     View Study PDF
                   </Button>
-                  <Button
+                                <Button
                     size="sm"
                     variant="ghost"
                     onClick={() =>
@@ -362,7 +430,7 @@ export const StudentDashboard: React.FC = () => {
                   >
                     Quick Revision
                   </Button>
-                  <Button
+                                <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => downloadStudentSubjectArtifact(activeSubjectId!, "zip")}
@@ -376,9 +444,15 @@ export const StudentDashboard: React.FC = () => {
                 <div className="section-header">
                   <h4>Topics & Materials</h4>
                 </div>
-                {concepts.length ? (
+                <Input
+                  label="Search topics"
+                  placeholder="Search by topic name or description"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+                {filteredConcepts.length ? (
                   <div className="topic-grid">
-                    {concepts.map((concept) => {
+                    {filteredConcepts.map((concept) => {
                       const material = materialMap.get(concept.concept_id);
                       return (
                         <Card key={concept.concept_id} className="topic-card">
@@ -401,6 +475,24 @@ export const StudentDashboard: React.FC = () => {
                             </Button>
                             {material ? (
                               <>
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() =>
+                                    navigate(`/learn/${activeSubjectId!}/${concept.concept_id}`)
+                                  }
+                                >
+                                  Open Learning Page
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant={
+                                    isBookmarked(concept.concept_id) ? "secondary" : "ghost"
+                                  }
+                                  onClick={() => handleToggleBookmark(concept)}
+                                >
+                                  {isBookmarked(concept.concept_id) ? "Bookmarked" : "Bookmark"}
+                                </Button>
                                 <Button
                                   size="sm"
                                   variant="ghost"
@@ -478,14 +570,14 @@ export const StudentDashboard: React.FC = () => {
               >
                 Previous
               </Button>
-              <Button
+                                <Button
                 size="sm"
                 variant="secondary"
                 onClick={() => setFlashcardFlipped((prev) => !prev)}
               >
                 {flashcardFlipped ? "Show Question" : "Show Answer"}
               </Button>
-              <Button
+                                <Button
                 size="sm"
                 variant="ghost"
                 onClick={() =>
@@ -603,3 +695,13 @@ export const StudentDashboard: React.FC = () => {
     </DashboardLayout>
   );
 };
+
+
+
+
+
+
+
+
+
+

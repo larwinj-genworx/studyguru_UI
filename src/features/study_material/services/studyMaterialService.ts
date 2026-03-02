@@ -5,6 +5,8 @@ import type {
   FlashcardItem,
   ConceptBulkCreate,
   ConceptMaterialResponse,
+  ConceptBookmarkResponse,
+  LearningContentResponse,
   MaterialJobStatusResponse,
   ResourceItem,
   SubjectCreate,
@@ -76,6 +78,11 @@ export const publishSubject = async (subjectId: string): Promise<SubjectResponse
   return response.data;
 };
 
+export const unpublishSubject = async (subjectId: string): Promise<SubjectResponse> => {
+  const response = await api.post(`${BASE_PATH}/admin/subjects/${subjectId}/unpublish`, {});
+  return response.data;
+};
+
 export const listPublishedSubjects = async (): Promise<SubjectResponse[]> => {
   const response = await api.get(`${BASE_PATH}/student/subjects`);
   return response.data;
@@ -91,6 +98,58 @@ export const listPublishedMaterials = async (
 ): Promise<ConceptMaterialResponse[]> => {
   const response = await api.get(`${BASE_PATH}/student/subjects/${subjectId}/materials`);
   return response.data;
+};
+
+export const getAdminLearningContent = async (
+  subjectId: string,
+  conceptId: string
+): Promise<LearningContentResponse> => {
+  const response = await api.get(
+    `${BASE_PATH}/admin/subjects/${subjectId}/concepts/${conceptId}/learning`
+  );
+  return response.data;
+};
+
+export const updateAdminLearningContent = async (
+  subjectId: string,
+  conceptId: string,
+  content: LearningContentResponse["content"]
+): Promise<LearningContentResponse> => {
+  const response = await api.patch(
+    `${BASE_PATH}/admin/subjects/${subjectId}/concepts/${conceptId}/learning`,
+    { content }
+  );
+  return response.data;
+};
+
+export const getStudentLearningContent = async (
+  subjectId: string,
+  conceptId: string
+): Promise<LearningContentResponse> => {
+  const response = await api.get(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/learning`
+  );
+  return response.data;
+};
+
+export const listStudentBookmarks = async (
+  subjectId?: string
+): Promise<ConceptBookmarkResponse[]> => {
+  const query = subjectId ? `?subject_id=${subjectId}` : "";
+  const response = await api.get(`${BASE_PATH}/student/bookmarks${query}`);
+  return response.data;
+};
+
+export const addStudentBookmark = async (subjectId: string, conceptId: string) => {
+  await api.post(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/bookmark`
+  );
+};
+
+export const removeStudentBookmark = async (subjectId: string, conceptId: string) => {
+  await api.delete(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/bookmark`
+  );
 };
 
 const downloadBlob = (data: Blob, filename: string) => {

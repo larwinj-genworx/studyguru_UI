@@ -6,6 +6,7 @@ import { LoginPage } from "@/features/auth/components/LoginPage";
 import { SignupPage } from "@/features/auth/components/SignupPage";
 import { AdminDashboard } from "@/features/study_material/components/AdminDashboard";
 import { StudentDashboard } from "@/features/study_material/components/StudentDashboard";
+import { ConceptLearningPage } from "@/features/study_material/components/ConceptLearningPage";
 import { NotFound } from "@/components/common/NotFound";
 import { useAppSelector } from "@/hooks/useAppSelector";
 
@@ -38,6 +39,14 @@ export const AppRoutes: React.FC = () => {
         element={
           <RequireAuth role="student">
             <StudentDashboard />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/learn/:subjectId/:conceptId"
+        element={
+          <RequireAuth>
+            <ConceptLearningPage />
           </RequireAuth>
         }
       />
