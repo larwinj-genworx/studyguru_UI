@@ -171,26 +171,20 @@ export const AdminDashboard: React.FC = () => {
   }, [subjects]);
 
   useEffect(() => {
-    const activeJobs = Object.values(jobMap).filter(
-      (job) => job.status === "queued" || job.status === "running"
-    );
-    if (!activeJobs.length) {
+    // Intentionally disabled auto-polling. Status updates should be user-triggered.
+  }, [jobMap]);
+
+  const handleRefreshJobStatus = async () => {
+    if (!activeJob) {
       return;
     }
-
-    const interval = window.setInterval(() => {
-      activeJobs.forEach(async (job) => {
-        try {
-          const updated = await getJobStatus(job.job_id);
-          setJobMap((prev) => ({ ...prev, [job.job_id]: updated }));
-        } catch {
-          // ignore polling errors
-        }
-      });
-    }, 2500);
-
-    return () => window.clearInterval(interval);
-  }, [jobMap]);
+    try {
+      const updated = await getJobStatus(activeJob.job_id);
+      setJobMap((prev) => ({ ...prev, [activeJob.job_id]: updated }));
+    } catch {
+      // ignore refresh errors
+    }
+  };
 
   const handleCreateSubject = async () => {
     setLoading(true);
@@ -563,6 +557,11 @@ export const AdminDashboard: React.FC = () => {
                   >
                     Generate Study Material
                   </Button>
+                  {activeJob ? (
+                    <Button variant="ghost" onClick={handleRefreshJobStatus}>
+                      Refresh Status
+                    </Button>
+                  ) : null}
                   {activeJob?.status === "completed" ? (
                     <Button variant="secondary" onClick={handleDownloadBundle}>
                       Download Bundle
