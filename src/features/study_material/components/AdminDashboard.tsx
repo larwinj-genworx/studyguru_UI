@@ -22,12 +22,16 @@ import {
   createAdminJob,
   createSubject,
   downloadAdminJobZip,
+  deleteSubject,
   fetchAdminConceptArtifact,
   getJobStatus,
   getSubject,
   listAdminJobs,
   listAdminSubjects,
   listAdminSubjectMaterials,
+  getAdminConceptResources,
+  refreshAdminConceptVideo,
+  approveAdminConceptVideo,
   publishSubject,
   unpublishSubject
 } from "@/features/study_material/services/studyMaterialService";
@@ -35,7 +39,9 @@ import type {
   AdminMaterialJobCreate,
   ConceptBulkCreate,
   ConceptMaterialResponse,
+  ConceptResourcesResponse,
   MaterialJobStatusResponse,
+  ResourceItem,
   SubjectCreate,
   SubjectResponse
 } from "@/features/study_material/types";
@@ -74,6 +80,22 @@ export const AdminDashboard: React.FC = () => {
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const [resourcesMeta, setResourcesMeta] = useState<{
+    conceptId: string;
+    conceptName: string;
+  } | null>(null);
+  const [resources, setResources] = useState<ResourceItem[]>([]);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
+  const [resourcesError, setResourcesError] = useState<string | null>(null);
+  const [videoPreview, setVideoPreview] = useState<{
+    title: string;
+    embedUrl: string;
+  } | null>(null);
+  const [videoActionLoading, setVideoActionLoading] = useState(false);
+  const [approvedVideoId, setApprovedVideoId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const activeSubject = activeSubjectId
@@ -105,6 +127,12 @@ export const AdminDashboard: React.FC = () => {
     setPreviewOpen(false);
     setPreviewBlob(null);
     setPreviewError(null);
+    setResourcesOpen(false);
+    setResourcesMeta(null);
+    setResources([]);
+    setResourcesError(null);
+    setVideoPreview(null);
+    setApprovedVideoId(null);
   }, [activeSubjectId]);
 
   useEffect(() => {
@@ -400,6 +428,168 @@ export const AdminDashboard: React.FC = () => {
     );
   };
 
+  const handleOpenDelete = () => {
+    if (!activeSubject) {
+      return;
+    }
+    setDeleteOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!activeSubject) {
+      return;
+    }
+    setDeleteLoading(true);
+    setError(null);
+    try {
+      await deleteSubject(activeSubject.subject_id);
+      setSubjects((prev) => {
+        const updated = prev.filter((subject) => subject.subject_id !== activeSubject.subject_id);
+        setActiveSubjectId((current) => {
+          if (current !== activeSubject.subject_id) {
+            return current;
+          }
+          return updated.length ? updated[0].subject_id : null;
+        });
+        return updated;
+      });
+      setMaterialsMap((prev) => {
+        const updated = { ...prev };
+        delete updated[activeSubject.subject_id];
+        return updated;
+      });
+      setJobMap((prev) => {
+        const updated = { ...prev };
+        const jobId = subjectJobs[activeSubject.subject_id];
+        if (jobId) {
+          delete updated[jobId];
+        }
+        return updated;
+      });
+      setSubjectJobs((prev) => {
+        const updated = { ...prev };
+        delete updated[activeSubject.subject_id];
+        return updated;
+      });
+      setDeleteOpen(false);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to delete syllabus.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const toYouTubeEmbed = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname.includes("youtu.be")) {
+        const id = parsed.pathname.replace("/", "");
+        return id ? `https://www.youtube.com/embed/${id}` : null;
+      }
+      if (parsed.hostname.includes("youtube.com")) {
+        if (parsed.pathname.startsWith("/embed/")) {
+          const id = parsed.pathname.replace("/embed/", "");
+          return id ? `https://www.youtube.com/embed/${id}` : null;
+        }
+        if (parsed.pathname.startsWith("/shorts/")) {
+          const id = parsed.pathname.replace("/shorts/", "");
+          return id ? `https://www.youtube.com/embed/${id}` : null;
+        }
+        const id = parsed.searchParams.get("v");
+        return id ? `https://www.youtube.com/embed/${id}` : null;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+
+  const handleOpenResources = async (concept: { concept_id: string; name: string }) => {
+    if (!activeSubjectId) {
+      return;
+    }
+    setResourcesOpen(true);
+    setResourcesMeta({ conceptId: concept.concept_id, conceptName: concept.name });
+    setResourcesLoading(true);
+    setResourcesError(null);
+    try {
+      const response: ConceptResourcesResponse = await getAdminConceptResources(
+        activeSubjectId,
+        concept.concept_id
+      );
+      setResources(response.resources || []);
+      setApprovedVideoId(response.approved_video_id ?? null);
+    } catch (err: any) {
+      setResourcesError(err?.response?.data?.detail || "Failed to load resources.");
+      setResources([]);
+    } finally {
+      setResourcesLoading(false);
+    }
+  };
+
+  const handleCloseResources = () => {
+    setResourcesOpen(false);
+    setResourcesMeta(null);
+    setResources([]);
+    setResourcesError(null);
+    setVideoPreview(null);
+    setApprovedVideoId(null);
+  };
+
+  const handleOpenVideo = (resource: ResourceItem) => {
+    const embedUrl = toYouTubeEmbed(resource.url);
+    if (!embedUrl) {
+      window.open(resource.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setVideoPreview({ title: resource.title, embedUrl });
+  };
+
+  const handleCloseVideo = () => {
+    setVideoPreview(null);
+  };
+
+  const handleRefreshVideo = async (resource: ResourceItem) => {
+    if (!activeSubjectId || !resourcesMeta) {
+      return;
+    }
+    setVideoActionLoading(true);
+    setResourcesError(null);
+    try {
+      const response = await refreshAdminConceptVideo(
+        activeSubjectId,
+        resourcesMeta.conceptId,
+        resource.url
+      );
+      setResources(response.resources || []);
+      setApprovedVideoId(response.approved_video_id ?? null);
+    } catch (err: any) {
+      setResourcesError(err?.response?.data?.detail || "Failed to refresh video.");
+    } finally {
+      setVideoActionLoading(false);
+    }
+  };
+
+  const handleApproveVideo = async (resource: ResourceItem) => {
+    if (!activeSubjectId || !resourcesMeta) {
+      return;
+    }
+    setVideoActionLoading(true);
+    setResourcesError(null);
+    try {
+      const response = await approveAdminConceptVideo(
+        activeSubjectId,
+        resourcesMeta.conceptId,
+        resource.url
+      );
+      setApprovedVideoId(response.approved_video_id ?? null);
+    } catch (err: any) {
+      setResourcesError(err?.response?.data?.detail || "Failed to approve video.");
+    } finally {
+      setVideoActionLoading(false);
+    }
+  };
+
   const renderArtifactActions = (options: {
     conceptId: string;
     conceptName: string;
@@ -414,6 +604,18 @@ export const AdminDashboard: React.FC = () => {
     if (!hasPreview) {
       return (
         <div className="inline-actions">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() =>
+              handleOpenResources({
+                concept_id: options.conceptId,
+                name: options.conceptName
+              })
+            }
+          >
+            Review Resources
+          </Button>
           {activeSubjectId ? (
             <Button
               size="sm"
@@ -431,6 +633,18 @@ export const AdminDashboard: React.FC = () => {
 
     return (
       <div className="inline-actions">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() =>
+            handleOpenResources({
+              concept_id: options.conceptId,
+              name: options.conceptName
+            })
+          }
+        >
+          Review Resources
+        </Button>
         {activeSubjectId ? (
           <Button
             size="sm"
@@ -564,9 +778,14 @@ export const AdminDashboard: React.FC = () => {
                   <h3>{activeSubject.name}</h3>
                   <p className="muted">Grade {activeSubject.grade_level}</p>
                 </div>
-                <Badge variant={activeSubject.published ? "success" : "warning"}>
-                  {activeSubject.published ? "Published" : "Draft"}
-                </Badge>
+                <div className="inline-actions">
+                  <Badge variant={activeSubject.published ? "success" : "warning"}>
+                    {activeSubject.published ? "Published" : "Draft"}
+                  </Badge>
+                  <Button variant="ghost" size="sm" onClick={handleOpenDelete}>
+                    Delete
+                  </Button>
+                </div>
               </div>
               {activeSubject.description ? <p>{activeSubject.description}</p> : null}
               <div className="section">
@@ -811,6 +1030,131 @@ export const AdminDashboard: React.FC = () => {
         error={previewError}
         onClose={handleClosePreview}
       />
+
+      <Modal
+        open={deleteOpen}
+        title="Delete Syllabus"
+        onClose={() => setDeleteOpen(false)}
+        footer={
+          <div className="inline-actions">
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleConfirmDelete} disabled={deleteLoading}>
+              {deleteLoading ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        }
+      >
+        <p>
+          This will permanently delete the syllabus, all topics, generated materials, jobs, and
+          resources. This action cannot be undone.
+        </p>
+      </Modal>
+
+      <Modal
+        open={resourcesOpen}
+        title={
+          resourcesMeta
+            ? `Resources - ${resourcesMeta.conceptName}`
+            : "Resources"
+        }
+        onClose={handleCloseResources}
+        className="viewer-modal"
+        bodyClassName="viewer-body"
+      >
+        {resourcesLoading ? (
+          <div className="flashcard-loading">
+            <LoadingSpinner />
+          </div>
+        ) : resourcesError ? (
+          <div className="alert danger">{resourcesError}</div>
+        ) : resources.length ? (
+          <div className="resource-list">
+            {resources.map((resource, index) => {
+              const isYoutube = Boolean(toYouTubeEmbed(resource.url));
+              const videoId = (() => {
+                try {
+                  const parsed = new URL(resource.url);
+                  if (parsed.hostname.includes("youtu.be")) {
+                    return parsed.pathname.replace("/", "");
+                  }
+                  if (parsed.pathname.startsWith("/embed/")) {
+                    return parsed.pathname.replace("/embed/", "");
+                  }
+                  if (parsed.pathname.startsWith("/shorts/")) {
+                    return parsed.pathname.replace("/shorts/", "");
+                  }
+                  return parsed.searchParams.get("v") || "";
+                } catch {
+                  return "";
+                }
+              })();
+              return (
+                <div key={`${resource.url}-${index}`} className="resource-card">
+                  <div>
+                    <p className="resource-title">{resource.title}</p>
+                    {resource.note ? <p className="muted">{resource.note}</p> : null}
+                    {approvedVideoId && videoId && approvedVideoId === videoId ? (
+                      <span className="badge success">Approved</span>
+                    ) : null}
+                  </div>
+                  <div className="inline-actions">
+                    <Button size="sm" variant="ghost" onClick={() => handleOpenVideo(resource)}>
+                      {isYoutube ? "Watch Video" : "Open Link"}
+                    </Button>
+                    {isYoutube ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleApproveVideo(resource)}
+                          disabled={videoActionLoading}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRefreshVideo(resource)}
+                          disabled={videoActionLoading}
+                        >
+                          Replace Video
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState
+            title="No resources yet"
+            description="Resources will appear once generation is completed."
+          />
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(videoPreview)}
+        title={videoPreview?.title ?? "Video"}
+        onClose={handleCloseVideo}
+        className="viewer-modal"
+        bodyClassName="viewer-body"
+      >
+        {videoPreview ? (
+          <div className="material-viewer">
+            <iframe
+              className="material-frame"
+              src={videoPreview.embedUrl}
+              title={videoPreview.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        ) : null}
+      </Modal>
 
       {loading ? (
         <div className="loading-overlay">

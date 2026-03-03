@@ -6,6 +6,7 @@ import type {
   ConceptBulkCreate,
   ConceptMaterialResponse,
   ConceptBookmarkResponse,
+  ConceptResourcesResponse,
   LearningContentResponse,
   MaterialJobStatusResponse,
   ResourceItem,
@@ -31,6 +32,10 @@ export const addConceptsBulk = async (
 export const getSubject = async (subjectId: string): Promise<SubjectResponse> => {
   const response = await api.get(`${BASE_PATH}/admin/subjects/${subjectId}`);
   return response.data;
+};
+
+export const deleteSubject = async (subjectId: string): Promise<void> => {
+  await api.delete(`${BASE_PATH}/admin/subjects/${subjectId}`);
 };
 
 export const listAdminSubjectMaterials = async (
@@ -137,6 +142,40 @@ export const listStudentBookmarks = async (
 ): Promise<ConceptBookmarkResponse[]> => {
   const query = subjectId ? `?subject_id=${subjectId}` : "";
   const response = await api.get(`${BASE_PATH}/student/bookmarks${query}`);
+  return response.data;
+};
+
+export const getAdminConceptResources = async (
+  subjectId: string,
+  conceptId: string
+): Promise<ConceptResourcesResponse> => {
+  const response = await api.get(
+    `${BASE_PATH}/admin/subjects/${subjectId}/concepts/${conceptId}/resources`
+  );
+  return response.data;
+};
+
+export const refreshAdminConceptVideo = async (
+  subjectId: string,
+  conceptId: string,
+  url: string
+): Promise<ConceptResourcesResponse> => {
+  const response = await api.post(
+    `${BASE_PATH}/admin/subjects/${subjectId}/concepts/${conceptId}/resources/videos/refresh`,
+    { url }
+  );
+  return response.data;
+};
+
+export const approveAdminConceptVideo = async (
+  subjectId: string,
+  conceptId: string,
+  url: string
+): Promise<ConceptResourcesResponse> => {
+  const response = await api.post(
+    `${BASE_PATH}/admin/subjects/${subjectId}/concepts/${conceptId}/resources/videos/approve`,
+    { url }
+  );
   return response.data;
 };
 

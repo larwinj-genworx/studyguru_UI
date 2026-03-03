@@ -352,6 +352,7 @@ const renderBlock = (block: LearningBlock) => {
     case "formula":
       return (
         <div className="formula-block">
+          {block.title ? <p className="formula-title">{block.title}</p> : null}
           <div className="formula-expression">{block.formula}</div>
           <div className="formula-variables">
             <p className="formula-label">Variables</p>

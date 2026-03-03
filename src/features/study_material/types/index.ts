@@ -43,6 +43,7 @@ export type LearningBlock =
   | { type: "list"; style: "bullet" | "number"; items: string[] }
   | {
       type: "formula";
+      title?: string;
       formula: string;
       variables?: { symbol: string; meaning: string }[];
       explanation?: string;
@@ -89,6 +90,15 @@ export interface ConceptBookmarkResponse {
   subject_id: string;
   subject_name: string;
   created_at: string;
+}
+
+export interface ConceptResourcesResponse {
+  concept_id: string;
+  concept_name: string;
+  subject_id: string;
+  subject_name: string;
+  resources: ResourceItem[];
+  approved_video_id?: string | null;
 }
 
 export interface ArtifactIndex {

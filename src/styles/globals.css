@@ -1120,7 +1120,7 @@ p {
   display: flex;
   flex-direction: column;
   gap: 1.7rem;
-  font-size: 1.05rem;
+  font-size: 1.12rem;
 }
 
 .learning-section {
@@ -1128,18 +1128,18 @@ p {
 }
 
 .learning-section h2 {
-  font-size: 1.7rem;
+  font-size: 1.85rem;
   margin-bottom: 0.7rem;
 }
 
 .learning-section h3 {
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   color: var(--primary);
   margin-top: 1.4rem;
 }
 
 .learning-paragraph {
-  line-height: 1.75;
+  line-height: 1.8;
   color: var(--ink-1);
 }
 
@@ -1166,6 +1166,12 @@ p {
   font-weight: 600;
   font-size: 1.2rem;
   color: var(--ink-0);
+}
+
+.formula-title {
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+  color: var(--primary-strong);
 }
 
 .formula-variables {
@@ -1278,7 +1284,8 @@ p {
 
 .example-step p {
   margin: 0;
-  line-height: 1.7;
+  line-height: 1.75;
+  font-size: 1.02rem;
 }
 
 .learning-quick ul {
@@ -1364,7 +1371,7 @@ p {
     font-size: 1.8rem;
   }
   .learning-content {
-    font-size: 1rem;
+    font-size: 1.02rem;
   }
 }
 
