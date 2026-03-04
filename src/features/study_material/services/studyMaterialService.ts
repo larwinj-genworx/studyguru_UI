@@ -2,6 +2,7 @@
 import type {
   AdminMaterialApproveRequest,
   AdminMaterialJobCreate,
+  AdminMaterialPublishRequest,
   FlashcardItem,
   ConceptBulkCreate,
   ConceptMaterialResponse,
@@ -34,8 +35,9 @@ export const getSubject = async (subjectId: string): Promise<SubjectResponse> =>
   return response.data;
 };
 
-export const deleteSubject = async (subjectId: string): Promise<void> => {
-  await api.delete(`${BASE_PATH}/admin/subjects/${subjectId}`);
+export const deleteSubject = async (subjectId: string, force?: boolean): Promise<void> => {
+  const config = force ? { params: { force: true } } : undefined;
+  await api.delete(`${BASE_PATH}/admin/subjects/${subjectId}`, config);
 };
 
 export const listAdminSubjectMaterials = async (
@@ -80,6 +82,17 @@ export const approveJob = async (
 
 export const publishSubject = async (subjectId: string): Promise<SubjectResponse> => {
   const response = await api.post(`${BASE_PATH}/admin/subjects/${subjectId}/publish`, {});
+  return response.data;
+};
+
+export const publishSelectedConcepts = async (
+  subjectId: string,
+  payload: AdminMaterialPublishRequest
+): Promise<SubjectResponse> => {
+  const response = await api.post(
+    `${BASE_PATH}/admin/subjects/${subjectId}/publish/concepts`,
+    payload
+  );
   return response.data;
 };
 
