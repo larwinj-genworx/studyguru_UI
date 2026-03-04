@@ -1138,6 +1138,77 @@ p {
   margin-top: 1.4rem;
 }
 
+.learning-section-step {
+  margin-top: 0.6rem;
+}
+
+.learning-step-card {
+  background: linear-gradient(135deg, rgba(31, 79, 130, 0.08), rgba(255, 255, 255, 0.92));
+  border: 1px solid rgba(31, 79, 130, 0.18);
+  border-left: 4px solid var(--primary);
+  border-radius: 16px;
+  padding: 1rem 1.1rem;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+}
+
+.learning-step-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.learning-step-badge {
+  background: var(--primary);
+  color: #fff;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.learning-step-title {
+  margin: 0;
+  font-size: 1.3rem;
+  color: var(--ink-0);
+}
+
+.learning-section-step .learning-paragraph {
+  margin-bottom: 0;
+}
+
+.learning-step-body {
+  margin-top: 0.1rem;
+  margin-bottom: 0.4rem;
+  color: var(--ink-1);
+}
+
+.learning-explain-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.learning-explain-card {
+  background: var(--surface-muted);
+  border-radius: 14px;
+  border: 1px solid rgba(31, 79, 130, 0.12);
+  border-left: 4px solid rgba(31, 79, 130, 0.55);
+  padding: 0.9rem 1.1rem;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+}
+
+.learning-explain-card .learning-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.learning-explain-card .learning-list {
+  margin-bottom: 0;
+}
+
 .learning-paragraph {
   line-height: 1.8;
   color: var(--ink-1);
@@ -1372,6 +1443,15 @@ p {
   }
   .learning-content {
     font-size: 1.02rem;
+  }
+  .learning-step-card {
+    padding: 0.85rem 0.95rem;
+  }
+  .learning-step-title {
+    font-size: 1.18rem;
+  }
+  .learning-explain-card {
+    padding: 0.8rem 0.9rem;
   }
 }
 

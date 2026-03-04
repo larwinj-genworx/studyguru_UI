@@ -34,8 +34,9 @@ export const getSubject = async (subjectId: string): Promise<SubjectResponse> =>
   return response.data;
 };
 
-export const deleteSubject = async (subjectId: string): Promise<void> => {
-  await api.delete(`${BASE_PATH}/admin/subjects/${subjectId}`);
+export const deleteSubject = async (subjectId: string, force?: boolean): Promise<void> => {
+  const config = force ? { params: { force: true } } : undefined;
+  await api.delete(`${BASE_PATH}/admin/subjects/${subjectId}`, config);
 };
 
 export const listAdminSubjectMaterials = async (

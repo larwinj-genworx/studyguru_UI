@@ -41,6 +41,7 @@ export const ConceptLearningPage: React.FC = () => {
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const sections = content?.content.sections || [];
+  const visibleSections = useMemo(() => pruneSections(sections), [sections]);
 
   useEffect(() => {
     if (!subjectId || !conceptId) {
@@ -75,7 +76,7 @@ export const ConceptLearningPage: React.FC = () => {
   }, [role, subjectId, conceptId]);
 
   useEffect(() => {
-    if (!sections.length) {
+    if (!visibleSections.length) {
       return;
     }
     const observer = new IntersectionObserver(
@@ -89,7 +90,7 @@ export const ConceptLearningPage: React.FC = () => {
       { rootMargin: "-20% 0px -65% 0px", threshold: 0.1 }
     );
 
-    sections.forEach((section) => {
+    visibleSections.forEach((section) => {
       const element = sectionRefs.current[section.id];
       if (element) {
         observer.observe(element);
@@ -103,9 +104,9 @@ export const ConceptLearningPage: React.FC = () => {
     });
 
     return () => observer.disconnect();
-  }, [sections]);
+  }, [visibleSections]);
 
-  const navItems = useMemo(() => flattenSections(sections), [sections]);
+  const navItems = useMemo(() => flattenSections(visibleSections), [visibleSections]);
 
   const quickRevisionItems = useMemo(() => {
     const quickSection = findSectionByTitle(sections, "Quick Revision");
@@ -257,7 +258,7 @@ export const ConceptLearningPage: React.FC = () => {
         </aside>
 
         <main className="learning-content">
-          {sections.map((section) => renderSection(section, sectionRefs))}
+          {visibleSections.map((section) => renderSection(section, sectionRefs))}
         </main>
       </div>
 
@@ -308,47 +309,305 @@ export const ConceptLearningPage: React.FC = () => {
   );
 };
 
+type BlockRenderContext = {
+  sectionTitle?: string;
+  isDetailed?: boolean;
+  isStep?: boolean;
+  stepTitle?: string;
+  stepNumber?: string;
+  skipParagraphText?: string;
+};
+
+const STEP_TITLE_REGEX = /^step\s*(\d+)\s*[:\.)-]?\s*(.*)$/i;
+
+const parseStepTitle = (title: string) => {
+  const match = STEP_TITLE_REGEX.exec(title.trim());
+  if (!match) {
+    return { number: "", title: title.trim() };
+  }
+  return { number: match[1] || "", title: (match[2] || "").trim() || title.trim() };
+};
+
+const normalizeText = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const isStepSection = (section: LearningSection) =>
+  section.level === 3 && STEP_TITLE_REGEX.test(section.title);
+
+const isDetailedSection = (section: LearningSection) =>
+  section.title.toLowerCase() === "detailed explanation";
+
+const isPracticalExamplesSection = (section: LearningSection) =>
+  section.title.toLowerCase() === "practical examples";
+
+const isRedundantStepParagraph = (sectionTitle: string, paragraph: string) => {
+  const parsed = parseStepTitle(sectionTitle);
+  const titleText = normalizeText(parsed.title || sectionTitle);
+  const paragraphText = normalizeText(paragraph);
+  if (!titleText || !paragraphText) {
+    return false;
+  }
+  return paragraphText === titleText;
+};
+
+const splitSentences = (text: string) => {
+  const cleaned = text.trim();
+  if (!cleaned) {
+    return [];
+  }
+  return (
+    cleaned
+      .match(/[^.!?]+[.!?]+|[^.!?]+$/g)
+      ?.map((sentence) => sentence.trim())
+      .filter(Boolean) ?? [cleaned]
+  );
+};
+
+const splitParagraphChunks = (text: string) => {
+  const cleaned = text.trim();
+  if (!cleaned) {
+    return [];
+  }
+  const sentences = splitSentences(cleaned);
+  if (sentences.length <= 2 && cleaned.length <= 260) {
+    return [cleaned];
+  }
+  const chunks: string[] = [];
+  let current = "";
+  sentences.forEach((sentence) => {
+    const trimmed = sentence.trim();
+    if (!trimmed) {
+      return;
+    }
+    if (!current) {
+      current = trimmed;
+      return;
+    }
+    if (current.length + trimmed.length + 1 <= 260) {
+      current = `${current} ${trimmed}`;
+    } else {
+      chunks.push(current);
+      current = trimmed;
+    }
+  });
+  if (current) {
+    chunks.push(current);
+  }
+  return chunks;
+};
+
+const normalizeExampleSteps = (steps?: string[]) => {
+  if (!steps?.length) {
+    return [];
+  }
+  const cleaned = steps
+    .map((step) => {
+      const trimmed = step.trim();
+      if (!trimmed) {
+        return "";
+      }
+      const stripped = trimmed
+        .replace(/^[{["']+/, "")
+        .replace(/[}\]"']+$/, "")
+        .replace(/^(example|description|steps|stepwise_solution|solution|process)\s*[:\-]\s*/i, "")
+        .trim();
+      return stripped;
+    })
+    .filter(Boolean);
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  cleaned.forEach((item) => {
+    const normalized = normalizeText(item);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    deduped.push(item);
+  });
+  return deduped;
+};
+
+const hasExampleContent = (section: LearningSection) => {
+  const exampleBlock = section.blocks.find((block) => block.type === "example") as
+    | { steps?: string[]; result?: string; title?: string }
+    | undefined;
+  if (!exampleBlock) {
+    return false;
+  }
+  const steps = normalizeExampleSteps(exampleBlock.steps);
+  const title = (exampleBlock.title || "").trim();
+  const result = (exampleBlock.result || "").trim();
+  return Boolean(title || result || steps.length);
+};
+
+const pruneSections = (sections: LearningSection[]): LearningSection[] => {
+  return sections.reduce<LearningSection[]>((acc, section) => {
+    const children = section.children?.length ? pruneSections(section.children) : [];
+    if (isPracticalExamplesSection(section)) {
+      const exampleChildren = children.filter(hasExampleContent);
+      if (!exampleChildren.length) {
+        return acc;
+      }
+      acc.push({ ...section, children: exampleChildren });
+      return acc;
+    }
+    const hasBlocks = section.blocks?.length;
+    const hasChildren = children.length;
+    if (!hasBlocks && !hasChildren) {
+      return acc;
+    }
+    acc.push({ ...section, children });
+    return acc;
+  }, []);
+};
+
+const getStepParagraphText = (section: LearningSection) => {
+  if (!isStepSection(section)) {
+    return "";
+  }
+  const paragraphBlock = section.blocks.find((block) => block.type === "paragraph") as
+    | { text?: string }
+    | undefined;
+  return paragraphBlock?.text?.trim() ?? "";
+};
+
+const getSectionDisplayTitle = (section: LearningSection) => {
+  if (!isStepSection(section)) {
+    return section.title;
+  }
+  const paragraphText = getStepParagraphText(section);
+  if (paragraphText) {
+    const sentences = splitSentences(paragraphText);
+    if (sentences.length) {
+      return sentences[0];
+    }
+  }
+  const parsed = parseStepTitle(section.title);
+  return parsed.title || section.title;
+};
+
 const renderSection = (
   section: LearningSection,
   refs: React.MutableRefObject<Record<string, HTMLElement | null>>
 ): React.ReactNode => {
   const HeadingTag = section.level === 3 ? "h3" : "h2";
+  const isStep = isStepSection(section);
+  const isDetailed = isDetailedSection(section);
+  const stepMeta = isStep ? parseStepTitle(section.title) : null;
+  const stepParagraphText = isStep ? getStepParagraphText(section) : "";
+  const stepSentences = stepParagraphText ? splitSentences(stepParagraphText) : [];
+  const displayStepTitle = isStep
+    ? stepSentences[0] || stepMeta?.title || section.title
+    : section.title;
+  const stepBody = isStep && stepSentences.length > 1 ? stepSentences.slice(1).join(" ").trim() : "";
+  const skipParagraphText = isStep && stepParagraphText ? stepParagraphText : undefined;
+  const sectionClassName = [
+    "learning-section",
+    isDetailed ? "learning-section-detailed" : "",
+    isStep ? "learning-section-step" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const blockNodes = section.blocks.map((block, index) => (
+    <div key={`${section.id}-block-${index}`}>
+      {renderBlock(block, {
+        sectionTitle: section.title,
+        isDetailed,
+        isStep,
+        stepTitle: stepMeta?.title,
+        stepNumber: stepMeta?.number,
+        skipParagraphText
+      })}
+    </div>
+  ));
+  const blockContent = isDetailed ? (
+    <div className="learning-explain-stack">{blockNodes}</div>
+  ) : (
+    <>{blockNodes}</>
+  );
+
   return (
     <section
       key={section.id}
       id={section.id}
-      className="learning-section"
+      className={sectionClassName}
       ref={(el) => {
         refs.current[section.id] = el;
       }}
     >
-      <HeadingTag>{section.title}</HeadingTag>
-      {section.blocks.map((block, index) => (
-        <div key={`${section.id}-block-${index}`}>{renderBlock(block)}</div>
-      ))}
+      {isStep ? (
+        <div className="learning-step-card">
+          <div className="learning-step-head">
+            <span className="learning-step-badge">
+              {stepMeta?.number ? `Step ${stepMeta.number}` : "Step"}
+            </span>
+            <HeadingTag className="learning-step-title">{displayStepTitle || section.title}</HeadingTag>
+          </div>
+          {stepBody ? <p className="learning-paragraph learning-step-body">{stepBody}</p> : null}
+          {blockContent}
+        </div>
+      ) : (
+        <>
+          <HeadingTag>{section.title}</HeadingTag>
+          {blockContent}
+        </>
+      )}
       {section.children?.map((child) => renderSection(child, refs))}
     </section>
   );
 };
 
-const renderBlock = (block: LearningBlock) => {
+const renderBlock = (block: LearningBlock, context?: BlockRenderContext) => {
   switch (block.type) {
     case "paragraph":
+      if (context?.skipParagraphText) {
+        const target = normalizeText(context.skipParagraphText);
+        if (target && normalizeText(block.text) === target) {
+          return null;
+        }
+      }
+      if (context?.isStep && context.sectionTitle && isRedundantStepParagraph(context.sectionTitle, block.text)) {
+        return null;
+      }
+      if (context?.isDetailed) {
+        const chunks = splitParagraphChunks(block.text);
+        return (
+          <div className="learning-explain-card">
+            {chunks.map((chunk, index) => (
+              <p key={`${chunk}-${index}`} className="learning-paragraph">
+                {chunk}
+              </p>
+            ))}
+          </div>
+        );
+      }
       return <p className="learning-paragraph">{block.text}</p>;
     case "list":
-      return block.style === "number" ? (
-        <ol className="learning-list">
-          {block.items.map((item, index) => (
-            <li key={`${item}-${index}`}>{item}</li>
-          ))}
-        </ol>
-      ) : (
-        <ul className="learning-list">
-          {block.items.map((item, index) => (
-            <li key={`${item}-${index}`}>{item}</li>
-          ))}
-        </ul>
-      );
+      {
+        const listNode =
+          block.style === "number" ? (
+            <ol className="learning-list">
+              {block.items.map((item, index) => (
+                <li key={`${item}-${index}`}>{item}</li>
+              ))}
+            </ol>
+          ) : (
+            <ul className="learning-list">
+              {block.items.map((item, index) => (
+                <li key={`${item}-${index}`}>{item}</li>
+              ))}
+            </ul>
+          );
+        return context?.isDetailed ? (
+          <div className="learning-explain-card">{listNode}</div>
+        ) : (
+          listNode
+        );
+      }
     case "formula":
       return (
         <div className="formula-block">
@@ -390,22 +649,33 @@ const renderBlock = (block: LearningBlock) => {
         </div>
       );
     case "example":
-      return (
-        <div className="example-block">
-          {block.title ? <p className="example-title">{block.title}</p> : null}
-          {block.steps?.length ? (
-            <div className="example-steps">
-              {block.steps.map((step, index) => (
-                <div key={`${step}-${index}`} className="example-step">
-                  <span className="example-step-index">{index + 1}</span>
-                  <p>{step}</p>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {block.result ? <p className="muted">{block.result}</p> : null}
-        </div>
-      );
+      {
+        const steps = normalizeExampleSteps(block.steps);
+        const resultText = (block.result || "").trim();
+        const result =
+          resultText && !resultText.toLowerCase().startsWith("result")
+            ? `Result: ${resultText}`
+            : resultText;
+        if (!steps.length && !result && !block.title) {
+          return null;
+        }
+        return (
+          <div className="example-block">
+            {block.title ? <p className="example-title">{block.title}</p> : null}
+            {steps.length ? (
+              <div className="example-steps">
+                {steps.map((step, index) => (
+                  <div key={`${step}-${index}`} className="example-step">
+                    <span className="example-step-index">{index + 1}</span>
+                    <p>{step}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {result ? <p className="muted">{result}</p> : null}
+          </div>
+        );
+      }
     default:
       return null;
   }
@@ -414,10 +684,10 @@ const renderBlock = (block: LearningBlock) => {
 const flattenSections = (sections: LearningSection[]) => {
   const items: { id: string; title: string; level: number }[] = [];
   sections.forEach((section) => {
-    items.push({ id: section.id, title: section.title, level: section.level });
+    items.push({ id: section.id, title: getSectionDisplayTitle(section), level: section.level });
     if (section.children?.length) {
       section.children.forEach((child) => {
-        items.push({ id: child.id, title: child.title, level: child.level });
+        items.push({ id: child.id, title: getSectionDisplayTitle(child), level: child.level });
       });
     }
   });

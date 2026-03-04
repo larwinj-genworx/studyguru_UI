@@ -103,6 +103,16 @@ export const AdminDashboard: React.FC = () => {
     : undefined;
   const activeJob = activeSubjectId ? jobMap[subjectJobs[activeSubjectId]] : undefined;
   const activeMaterials = activeSubjectId ? materialsMap[activeSubjectId] : undefined;
+  const hasRunningJobs = useMemo(() => {
+    if (!activeSubjectId) {
+      return false;
+    }
+    return Object.values(jobMap).some(
+      (job) =>
+        job.subject_id === activeSubjectId &&
+        ["queued", "running"].includes(job.status)
+    );
+  }, [activeSubjectId, jobMap]);
 
   const canPublish = useMemo(() => {
     if (!activeSubject) {
@@ -442,7 +452,7 @@ export const AdminDashboard: React.FC = () => {
     setDeleteLoading(true);
     setError(null);
     try {
-      await deleteSubject(activeSubject.subject_id);
+      await deleteSubject(activeSubject.subject_id, hasRunningJobs);
       setSubjects((prev) => {
         const updated = prev.filter((subject) => subject.subject_id !== activeSubject.subject_id);
         setActiveSubjectId((current) => {
@@ -1046,6 +1056,12 @@ export const AdminDashboard: React.FC = () => {
           </div>
         }
       >
+        {hasRunningJobs ? (
+          <div className="alert danger">
+            A generation job is running for this syllabus. Deleting will stop the job and remove
+            all related data.
+          </div>
+        ) : null}
         <p>
           This will permanently delete the syllabus, all topics, generated materials, jobs, and
           resources. This action cannot be undone.
