@@ -163,3 +163,7 @@ export interface AdminMaterialApproveRequest {
   concept_ids?: string[];
   approval_note?: string | null;
 }
+
+export interface AdminMaterialPublishRequest {
+  concept_ids: string[];
+}

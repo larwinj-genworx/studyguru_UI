@@ -1,5 +1,4 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { Button } from "@/components/ui/Button";
@@ -33,10 +32,12 @@ import {
   refreshAdminConceptVideo,
   approveAdminConceptVideo,
   publishSubject,
+  publishSelectedConcepts,
   unpublishSubject
 } from "@/features/study_material/services/studyMaterialService";
 import type {
   AdminMaterialJobCreate,
+  AdminMaterialPublishRequest,
   ConceptBulkCreate,
   ConceptMaterialResponse,
   ConceptResourcesResponse,
@@ -70,6 +71,8 @@ export const AdminDashboard: React.FC = () => {
     grade_level: "",
     description: ""
   });
+  const [subjectQuery, setSubjectQuery] = useState("");
+  const [selectedConceptIds, setSelectedConceptIds] = useState<Set<string>>(new Set());
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewMeta, setPreviewMeta] = useState<{
@@ -96,7 +99,6 @@ export const AdminDashboard: React.FC = () => {
   } | null>(null);
   const [videoActionLoading, setVideoActionLoading] = useState(false);
   const [approvedVideoId, setApprovedVideoId] = useState<string | null>(null);
-  const navigate = useNavigate();
 
   const activeSubject = activeSubjectId
     ? subjects.find((subject) => subject.subject_id === activeSubjectId)
@@ -114,7 +116,7 @@ export const AdminDashboard: React.FC = () => {
     );
   }, [activeSubjectId, jobMap]);
 
-  const canPublish = useMemo(() => {
+  const canPublishAll = useMemo(() => {
     if (!activeSubject) {
       return false;
     }
@@ -126,12 +128,56 @@ export const AdminDashboard: React.FC = () => {
     );
   }, [activeSubject]);
 
+  const selectedConcepts = useMemo(() => {
+    if (!activeSubject) {
+      return [];
+    }
+    return activeSubject.concepts.filter((concept) =>
+      selectedConceptIds.has(concept.concept_id)
+    );
+  }, [activeSubject, selectedConceptIds]);
+
+  const canPublishSelected = useMemo(() => {
+    if (!selectedConcepts.length) {
+      return false;
+    }
+    return selectedConcepts.every((concept) =>
+      ["approved", "published"].includes(concept.material_status)
+    );
+  }, [selectedConcepts]);
+
   const activeConceptIds = useMemo(() => {
     if (!activeSubject) {
       return [];
     }
     return activeSubject.concepts.map((concept) => concept.concept_id);
   }, [activeSubject]);
+
+  const conceptNameMap = useMemo(() => {
+    if (!activeSubject) {
+      return {};
+    }
+    return Object.fromEntries(
+      activeSubject.concepts.map((concept) => [concept.concept_id, concept.name])
+    );
+  }, [activeSubject]);
+
+  const filteredSubjects = useMemo(() => {
+    const query = subjectQuery.trim().toLowerCase();
+    if (!query) {
+      return subjects;
+    }
+    return subjects.filter((subject) => {
+      const haystack = [
+        subject.name,
+        subject.grade_level,
+        subject.description || ""
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [subjects, subjectQuery]);
 
   useEffect(() => {
     setPreviewOpen(false);
@@ -143,6 +189,7 @@ export const AdminDashboard: React.FC = () => {
     setResourcesError(null);
     setVideoPreview(null);
     setApprovedVideoId(null);
+    setSelectedConceptIds(new Set());
   }, [activeSubjectId]);
 
   useEffect(() => {
@@ -284,13 +331,20 @@ export const AdminDashboard: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
+      const conceptIds =
+        selectedConceptIds.size > 0 ? Array.from(selectedConceptIds) : activeConceptIds;
+      if (!conceptIds.length) {
+        setError("Select at least one topic to generate.");
+        return;
+      }
       const payload: AdminMaterialJobCreate = {
         subject_id: activeSubjectId,
-        concept_ids: activeConceptIds
+        concept_ids: conceptIds
       };
       const response = await createAdminJob(payload);
       setJobMap((prev) => ({ ...prev, [response.job_id]: response }));
       setSubjectJobs((prev) => ({ ...prev, [activeSubjectId]: response.job_id }));
+      setSelectedConceptIds(new Set());
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Failed to start generation.");
     } finally {
@@ -324,6 +378,35 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handlePublishSelected = async () => {
+    if (!activeSubjectId) {
+      return;
+    }
+    const conceptIds = Array.from(selectedConceptIds);
+    if (!conceptIds.length) {
+      setError("Select at least one topic to publish.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const payload: AdminMaterialPublishRequest = { concept_ids: conceptIds };
+      const response = await publishSelectedConcepts(activeSubjectId, payload);
+      setSubjects((prev) =>
+        prev.map((subject) =>
+          subject.subject_id === activeSubjectId ? response : subject
+        )
+      );
+      const materials = await listAdminSubjectMaterials(activeSubjectId);
+      setMaterialsMap((prev) => ({ ...prev, [activeSubjectId]: materials }));
+      setSelectedConceptIds(new Set());
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Publish failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePublishSubject = async () => {
     if (!activeSubjectId) {
       return;
@@ -337,6 +420,8 @@ export const AdminDashboard: React.FC = () => {
           subject.subject_id === activeSubjectId ? response : subject
         )
       );
+      const materials = await listAdminSubjectMaterials(activeSubjectId);
+      setMaterialsMap((prev) => ({ ...prev, [activeSubjectId]: materials }));
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Publish failed.");
     } finally {
@@ -357,6 +442,8 @@ export const AdminDashboard: React.FC = () => {
           subject.subject_id === activeSubjectId ? response : subject
         )
       );
+      const materials = await listAdminSubjectMaterials(activeSubjectId);
+      setMaterialsMap((prev) => ({ ...prev, [activeSubjectId]: materials }));
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Unpublish failed.");
     } finally {
@@ -369,6 +456,50 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
     await downloadAdminJobZip(activeJob.job_id);
+  };
+
+  const handleToggleConceptSelection = (conceptId: string) => {
+    setSelectedConceptIds((prev) => {
+      const updated = new Set(prev);
+      if (updated.has(conceptId)) {
+        updated.delete(conceptId);
+      } else {
+        updated.add(conceptId);
+      }
+      return updated;
+    });
+  };
+
+  const handleSelectAllConcepts = () => {
+    if (!activeSubject?.concepts.length) {
+      return;
+    }
+    setSelectedConceptIds(new Set(activeSubject.concepts.map((concept) => concept.concept_id)));
+  };
+
+  const handleClearSelectedConcepts = () => {
+    setSelectedConceptIds(new Set());
+  };
+
+  const getConceptStatusMeta = (status: ConceptMaterialResponse["lifecycle_status"] | SubjectResponse["concepts"][number]["material_status"]) => {
+    switch (status) {
+      case "published":
+        return { label: "Published", tone: "success" };
+      case "approved":
+        return { label: "Ready to Publish", tone: "info" };
+      case "draft":
+        return { label: "Needs Approval", tone: "warning" };
+      default:
+        return { label: "Not Generated", tone: "neutral" };
+    }
+  };
+
+  const handleOpenLearningPage = (conceptId: string) => {
+    if (!activeSubjectId) {
+      return;
+    }
+    const url = `${window.location.origin}/learn/${activeSubjectId}/${conceptId}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const toSafeFilename = (value: string) => {
@@ -630,7 +761,7 @@ export const AdminDashboard: React.FC = () => {
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => navigate(`/learn/${activeSubjectId}/${options.conceptId}`)}
+              onClick={() => handleOpenLearningPage(options.conceptId)}
             >
               Open Learning Page
             </Button>
@@ -659,7 +790,7 @@ export const AdminDashboard: React.FC = () => {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => navigate(`/learn/${activeSubjectId}/${options.conceptId}`)}
+            onClick={() => handleOpenLearningPage(options.conceptId)}
           >
             Open Learning Page
           </Button>
@@ -731,18 +862,42 @@ export const AdminDashboard: React.FC = () => {
       );
     }
 
-    return subjects.map((subject) => (
-      <button
-        key={subject.subject_id}
-        className={`list-item ${activeSubjectId === subject.subject_id ? "active" : ""}`}
-        onClick={() => setActiveSubjectId(subject.subject_id)}
-      >
-        <div>
-          <p className="list-title">{subject.name}</p>
-          <span className="list-subtitle">Grade {subject.grade_level}</span>
-        </div>
-      </button>
-    ));
+    if (!filteredSubjects.length) {
+      return (
+        <EmptyState
+          title="No matching syllabus"
+          description="Try a different keyword to find your syllabus."
+        />
+      );
+    }
+
+    return filteredSubjects.map((subject) => {
+      const isActive = activeSubjectId === subject.subject_id;
+      const topicCount = subject.concepts.length;
+      return (
+        <button
+          key={subject.subject_id}
+          className={`subject-card ${isActive ? "active" : ""}`}
+          onClick={() => setActiveSubjectId(subject.subject_id)}
+        >
+          <div className="subject-card-header">
+            <div>
+              <p className="subject-card-title">{subject.name}</p>
+              <p className="subject-card-subtitle">Grade {subject.grade_level}</p>
+            </div>
+            <Badge variant={subject.published ? "success" : "warning"}>
+              {subject.published ? "Published" : "Draft"}
+            </Badge>
+          </div>
+          <p className={`subject-card-description ${subject.description ? "" : "muted"}`}>
+            {subject.description || "No description provided yet."}
+          </p>
+          <div className="subject-card-footer">
+            <span className="subject-card-meta">{topicCount} Topics</span>
+          </div>
+        </button>
+      );
+    });
   };
 
   return (
@@ -762,169 +917,245 @@ export const AdminDashboard: React.FC = () => {
 
       {error ? <div className="alert danger">{error}</div> : null}
 
-      <div className="grid two-col">
-        <Card className="panel">
-          <div className="panel-header">
-            <h3>All Syllabi</h3>
-            <Button variant="ghost" onClick={() => setShowSubjectModal(true)}>
-              New
-            </Button>
-          </div>
-          <div className="list-stack">{renderSubjectList()}</div>
-        </Card>
+      <Card className="panel admin-subjects-panel">
+        <div className="panel-header">
+          <h3>All Syllabi</h3>
+          <Button variant="ghost" onClick={() => setShowSubjectModal(true)}>
+            New
+          </Button>
+        </div>
+        <div className="subject-toolbar">
+          <Input
+            label="Search Syllabus"
+            value={subjectQuery}
+            onChange={(event) => setSubjectQuery(event.target.value)}
+            placeholder="Search by name, grade, or description"
+          />
+        </div>
+        <div className="subject-grid">{renderSubjectList()}</div>
+      </Card>
 
-        <div className="stack">
-          {!activeSubject ? (
-            <Card className="panel">
-              <EmptyState
-                title="Select a syllabus"
-                description="Choose a syllabus on the left to view details and generate materials."
-              />
-            </Card>
-          ) : (
-            <Card className="panel">
-              <div className="panel-header">
+      <div className="admin-workspace">
+        {!activeSubject ? (
+          <Card className="panel">
+            <EmptyState
+              title="Select a syllabus"
+              description="Choose a syllabus above to view details and generate materials."
+            />
+          </Card>
+        ) : (
+          <Card className="panel">
+            <div className="panel-header">
+              <div>
+                <h3>{activeSubject.name}</h3>
+                <p className="muted">Grade {activeSubject.grade_level}</p>
+              </div>
+              <div className="inline-actions">
+                <Badge variant={activeSubject.published ? "success" : "warning"}>
+                  {activeSubject.published ? "Published" : "Draft"}
+                </Badge>
+                <Button variant="ghost" size="sm" onClick={handleOpenDelete}>
+                  Delete
+                </Button>
+              </div>
+            </div>
+            {activeSubject.description ? <p>{activeSubject.description}</p> : null}
+            <div className="section">
+              <div className="section-header">
                 <div>
-                  <h3>{activeSubject.name}</h3>
-                  <p className="muted">Grade {activeSubject.grade_level}</p>
+                  <h4>Topics</h4>
+                  <p className="muted">
+                    Selected {selectedConceptIds.size} of {activeSubject.concepts.length}
+                  </p>
                 </div>
                 <div className="inline-actions">
-                  <Badge variant={activeSubject.published ? "success" : "warning"}>
-                    {activeSubject.published ? "Published" : "Draft"}
-                  </Badge>
-                  <Button variant="ghost" size="sm" onClick={handleOpenDelete}>
-                    Delete
+                  <Button variant="ghost" size="sm" onClick={handleSelectAllConcepts}>
+                    Select All
                   </Button>
-                </div>
-              </div>
-              {activeSubject.description ? <p>{activeSubject.description}</p> : null}
-              <div className="section">
-                <div className="section-header">
-                  <h4>Topics</h4>
+                  <Button variant="ghost" size="sm" onClick={handleClearSelectedConcepts}>
+                    Clear
+                  </Button>
                   <Button variant="secondary" onClick={() => setShowConceptModal(true)}>
                     Add Topics
                   </Button>
                 </div>
-                {activeSubject.concepts.length ? (
-                  <div className="chip-grid">
-                    {activeSubject.concepts.map((concept) => (
-                      <span key={concept.concept_id} className="chip">
-                        {concept.name}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    title="No topics yet"
-                    description="Add at least one topic before generating study materials."
-                  />
-                )}
               </div>
-              <div className="section">
-                <div className="section-header">
-                  <h4>Generation</h4>
+              {activeSubject.concepts.length ? (
+                <div className="topic-list">
+                  {activeSubject.concepts.map((concept) => (
+                    <div
+                      key={concept.concept_id}
+                      className={`topic-item ${
+                        selectedConceptIds.has(concept.concept_id) ? "selected" : ""
+                      }`}
+                    >
+                      {(() => {
+                        const statusMeta = getConceptStatusMeta(concept.material_status);
+                        return (
+                          <span className={`topic-ribbon ${statusMeta.tone}`}>
+                            {statusMeta.label}
+                          </span>
+                        );
+                      })()}
+                      <label className="topic-select">
+                        <input
+                          type="checkbox"
+                          checked={selectedConceptIds.has(concept.concept_id)}
+                          onChange={() => handleToggleConceptSelection(concept.concept_id)}
+                          aria-label={`Select ${concept.name}`}
+                        />
+                        <span aria-hidden="true" />
+                      </label>
+                      <div className="topic-content">
+                        <p className="topic-name">{concept.name}</p>
+                        <p className="topic-desc">
+                          {concept.description || "No topic description provided."}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+              ) : (
+                <EmptyState
+                  title="No topics yet"
+                  description="Add at least one topic before generating study materials."
+                />
+              )}
+            </div>
+            <div className="section">
+              <div className="section-header">
+                <h4>Generation</h4>
+              </div>
+              <div className="inline-actions">
+                <Button
+                  onClick={handleGenerateMaterial}
+                  disabled={!activeSubject.concepts.length || loading}
+                >
+                  {selectedConceptIds.size
+                    ? `Generate Selected (${selectedConceptIds.size})`
+                    : "Generate All Topics"}
+                </Button>
+                {activeJob ? (
+                  <Button variant="ghost" onClick={handleRefreshJobStatus}>
+                    Refresh Status
+                  </Button>
+                ) : null}
+                {activeJob?.status === "completed" ? (
+                  <Button variant="secondary" onClick={handleDownloadBundle}>
+                    Download Bundle
+                  </Button>
+                ) : null}
+              </div>
+              {activeJob ? (
+                <JobProgress
+                  job={activeJob}
+                  subjectName={activeSubject?.name}
+                  conceptNameMap={conceptNameMap}
+                />
+              ) : null}
+              {activeJob?.status === "completed" && activeJob.review_status !== "approved" ? (
+                <div className="inline-actions">
+                  <Button variant="secondary" onClick={handleApproveJob}>
+                    Approve Materials
+                  </Button>
+                </div>
+              ) : null}
+              {selectedConceptIds.size ? (
+                <>
+                  <div className="inline-actions">
+                    <Button
+                      variant="ghost"
+                      onClick={handlePublishSelected}
+                      disabled={!canPublishSelected || loading}
+                    >
+                      Publish Selected ({selectedConceptIds.size})
+                    </Button>
+                  </div>
+                  {!canPublishSelected ? (
+                    <p className="muted">
+                      Only topics marked Ready to Publish can be published.
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+              {!activeSubject.published && !selectedConceptIds.size ? (
                 <div className="inline-actions">
                   <Button
-                    onClick={handleGenerateMaterial}
-                    disabled={!activeSubject.concepts.length || loading}
+                    variant="ghost"
+                    onClick={handlePublishSubject}
+                    disabled={!canPublishAll || loading}
                   >
-                    Generate Study Material
+                    Publish All Topics
                   </Button>
-                  {activeJob ? (
-                    <Button variant="ghost" onClick={handleRefreshJobStatus}>
-                      Refresh Status
-                    </Button>
-                  ) : null}
-                  {activeJob?.status === "completed" ? (
-                    <Button variant="secondary" onClick={handleDownloadBundle}>
-                      Download Bundle
-                    </Button>
-                  ) : null}
                 </div>
-                {activeJob ? <JobProgress job={activeJob} /> : null}
-                {activeJob?.status === "completed" && activeJob.review_status !== "approved" ? (
-                  <div className="inline-actions">
-                    <Button variant="secondary" onClick={handleApproveJob}>
-                      Approve Materials
-                    </Button>
-                  </div>
-                ) : null}
-                {activeSubject.published ? null : (
-                  <div className="inline-actions">
-                    <Button variant="ghost" onClick={handlePublishSubject} disabled={!canPublish}>
-                      Publish to Students
-                    </Button>
-                  </div>
-                )}
-                {activeSubject.published ? (
-                  <div className="inline-actions">
-                    <Button variant="ghost" onClick={handleUnpublishSubject}>
-                      Unpublish
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            </Card>
-          )}
-
-          <Card className="panel">
-            <div className="panel-header">
-              <h3>Generated Materials</h3>
+              ) : null}
+              {activeSubject.published ? (
+                <div className="inline-actions">
+                  <Button variant="ghost" onClick={handleUnpublishSubject} disabled={loading}>
+                    Unpublish
+                  </Button>
+                </div>
+              ) : null}
             </div>
-            {activeJob?.status === "completed" && activeJob.review_status !== "approved" ? (
-              <div className="review-note">
-                Review the generated materials below before approving.
-              </div>
-            ) : null}
-            {activeMaterials && activeMaterials.length ? (
-              <div className="material-list">
-                {activeMaterials.map((material) => (
-                  <div key={material.concept_id} className="material-card">
+          </Card>
+        )}
+
+        <Card className="panel">
+          <div className="panel-header">
+            <h3>Generated Materials</h3>
+          </div>
+          {activeJob?.status === "completed" && activeJob.review_status !== "approved" ? (
+            <div className="review-note">
+              Review the generated materials below before approving.
+            </div>
+          ) : null}
+          {activeMaterials && activeMaterials.length ? (
+            <div className="material-list">
+              {activeMaterials.map((material) => (
+                <div key={material.concept_id} className="material-card">
+                  <div>
+                    <h4>{material.concept_name}</h4>
+                    <p className="muted">Version {material.version}</p>
+                  </div>
+                  {renderArtifactActions({
+                    conceptId: material.concept_id,
+                    conceptName: material.concept_name,
+                    jobId: material.source_job_id,
+                    artifactIndex: material.artifact_index
+                  })}
+                </div>
+              ))}
+            </div>
+          ) : activeJob?.status === "completed" && activeSubject ? (
+            <div className="material-list">
+              {activeSubject.concepts.map((concept) => {
+                const artifacts = activeJob.concept_artifacts[concept.concept_id];
+                if (!artifacts) {
+                  return null;
+                }
+                return (
+                  <div key={concept.concept_id} className="material-card">
                     <div>
-                      <h4>{material.concept_name}</h4>
-                      <p className="muted">Version {material.version}</p>
+                      <h4>{concept.name}</h4>
+                      <p className="muted">Ready for review</p>
                     </div>
                     {renderArtifactActions({
-                      conceptId: material.concept_id,
-                      conceptName: material.concept_name,
-                      jobId: material.source_job_id,
-                      artifactIndex: material.artifact_index
+                      conceptId: concept.concept_id,
+                      conceptName: concept.name,
+                      jobId: activeJob.job_id,
+                      artifactIndex: artifacts
                     })}
                   </div>
-                ))}
-              </div>
-            ) : activeJob?.status === "completed" && activeSubject ? (
-              <div className="material-list">
-                {activeSubject.concepts.map((concept) => {
-                  const artifacts = activeJob.concept_artifacts[concept.concept_id];
-                  if (!artifacts) {
-                    return null;
-                  }
-                  return (
-                    <div key={concept.concept_id} className="material-card">
-                      <div>
-                        <h4>{concept.name}</h4>
-                        <p className="muted">Ready for review</p>
-                      </div>
-                      {renderArtifactActions({
-                        conceptId: concept.concept_id,
-                        conceptName: concept.name,
-                        jobId: activeJob.job_id,
-                        artifactIndex: artifacts
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyState
-                title="No materials yet"
-                description="Generate and approve materials to see them listed here."
-              />
-            )}
-          </Card>
-        </div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState
+              title="No materials yet"
+              description="Generate and approve materials to see them listed here."
+            />
+          )}
+        </Card>
       </div>
 
       <Modal
@@ -1180,4 +1411,3 @@ export const AdminDashboard: React.FC = () => {
     </DashboardLayout>
   );
 };
-

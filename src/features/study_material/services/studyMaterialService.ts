@@ -2,6 +2,7 @@
 import type {
   AdminMaterialApproveRequest,
   AdminMaterialJobCreate,
+  AdminMaterialPublishRequest,
   FlashcardItem,
   ConceptBulkCreate,
   ConceptMaterialResponse,
@@ -81,6 +82,17 @@ export const approveJob = async (
 
 export const publishSubject = async (subjectId: string): Promise<SubjectResponse> => {
   const response = await api.post(`${BASE_PATH}/admin/subjects/${subjectId}/publish`, {});
+  return response.data;
+};
+
+export const publishSelectedConcepts = async (
+  subjectId: string,
+  payload: AdminMaterialPublishRequest
+): Promise<SubjectResponse> => {
+  const response = await api.post(
+    `${BASE_PATH}/admin/subjects/${subjectId}/publish/concepts`,
+    payload
+  );
   return response.data;
 };
 
