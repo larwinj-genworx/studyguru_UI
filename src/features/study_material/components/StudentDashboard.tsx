@@ -27,6 +27,7 @@ import {
   listPublishedMaterials,
   listPublishedSubjects
 } from "@/features/study_material/services/studyMaterialService";
+import { startQuizSession } from "@/features/quiz/services/quizService";
 import type {
   ConceptMaterialResponse,
   ConceptBookmarkResponse,
@@ -80,6 +81,8 @@ export const StudentDashboard: React.FC = () => {
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [selectedConceptIds, setSelectedConceptIds] = useState<string[]>([]);
+  const [quizStarting, setQuizStarting] = useState(false);
 
   useEffect(() => {
     const fetchSubjects = async () => {
@@ -146,6 +149,7 @@ export const StudentDashboard: React.FC = () => {
     setPreviewError(null);
     setSearchQuery("");
     setBookmarks([]);
+    setSelectedConceptIds([]);
   }, [activeSubjectId]);
 
   const activeSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
@@ -358,6 +362,34 @@ export const StudentDashboard: React.FC = () => {
     });
   };
 
+  const toggleConceptSelection = (conceptId: string) => {
+    setSelectedConceptIds((prev) => {
+      if (prev.includes(conceptId)) {
+        return prev.filter((id) => id !== conceptId);
+      }
+      return [...prev, conceptId];
+    });
+  };
+
+  const handleStartQuiz = async () => {
+    if (!activeSubjectId || selectedConceptIds.length === 0) {
+      return;
+    }
+    setQuizStarting(true);
+    setError(null);
+    try {
+      const response = await startQuizSession({
+        subject_id: activeSubjectId,
+        concept_ids: selectedConceptIds
+      });
+      navigate(`/student/quiz/${response.session.session_id}`);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to start quiz session.");
+    } finally {
+      setQuizStarting(false);
+    }
+  };
+
   return (
     <DashboardLayout title="Student Library" subtitle="Explore published study materials.">
       <PageHeader
@@ -439,6 +471,68 @@ export const StudentDashboard: React.FC = () => {
                   </Button>
                 </div>
                 <p className="muted">A combined version of all topics in one file set.</p>
+              </div>
+              <div className="section">
+                <div className="section-header">
+                  <h4>Start a Custom Quiz</h4>
+                  <Badge variant="info">New</Badge>
+                </div>
+                <p className="muted">
+                  Select the topics you want to be tested on. Your quiz is generated uniquely
+                  when you click Start Test.
+                </p>
+                {filteredConcepts.length ? (
+                  <div className="topic-list">
+                    {filteredConcepts.map((concept) => {
+                      const isSelected = selectedConceptIds.includes(concept.concept_id);
+                      return (
+                        <div
+                          key={`quiz-${concept.concept_id}`}
+                          className={`topic-item ${isSelected ? "selected" : ""}`}
+                        >
+                          <span className="topic-ribbon info">Published</span>
+                          <label className="topic-select">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleConceptSelection(concept.concept_id)}
+                            />
+                            <span />
+                          </label>
+                          <div className="topic-content">
+                            <p className="topic-name">{concept.name}</p>
+                            <p className="topic-desc">
+                              {concept.description || "Concept overview"}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <EmptyState title="No topics" description="No published topics found." />
+                )}
+                <div className="inline-actions">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={!selectedConceptIds.length || quizStarting}
+                    onClick={handleStartQuiz}
+                  >
+                    {quizStarting ? "Starting..." : "Start Test"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!selectedConceptIds.length}
+                    onClick={() => setSelectedConceptIds([])}
+                  >
+                    Clear Selection
+                  </Button>
+                  <span className="muted">
+                    {selectedConceptIds.length} topic(s) selected
+                  </span>
+                </div>
               </div>
               <div className="section">
                 <div className="section-header">

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { Button } from "@/components/ui/Button";
@@ -20,7 +20,7 @@ import {
   approveJob,
   createAdminJob,
   createSubject,
-  downloadAdminJobZip,
+  downloadApprovedMaterialsBundle,
   deleteSubject,
   fetchAdminConceptArtifact,
   getJobStatus,
@@ -31,6 +31,7 @@ import {
   getAdminConceptResources,
   refreshAdminConceptVideo,
   approveAdminConceptVideo,
+  discardJobConcept,
   publishSubject,
   publishSelectedConcepts,
   unpublishSubject
@@ -99,12 +100,43 @@ export const AdminDashboard: React.FC = () => {
   } | null>(null);
   const [videoActionLoading, setVideoActionLoading] = useState(false);
   const [approvedVideoId, setApprovedVideoId] = useState<string | null>(null);
+  const [reviewDeleteOpen, setReviewDeleteOpen] = useState(false);
+  const [reviewDeleteMeta, setReviewDeleteMeta] = useState<{
+    jobId: string;
+    conceptId: string;
+    conceptName: string;
+  } | null>(null);
+  const jobStatusRef = useRef<string | null>(null);
 
   const activeSubject = activeSubjectId
     ? subjects.find((subject) => subject.subject_id === activeSubjectId)
     : undefined;
   const activeJob = activeSubjectId ? jobMap[subjectJobs[activeSubjectId]] : undefined;
+  const activeJobId = activeJob?.job_id;
+  const activeJobStatus = activeJob?.status;
   const activeMaterials = activeSubjectId ? materialsMap[activeSubjectId] : undefined;
+  const latestMaterialMap = useMemo(() => {
+    const map: Record<string, ConceptMaterialResponse> = {};
+    (activeMaterials || []).forEach((material) => {
+      map[material.concept_id] = material;
+    });
+    return map;
+  }, [activeMaterials]);
+  const resolveConceptStatus = useCallback(
+    (concept: SubjectResponse["concepts"][number]) => {
+      const material = latestMaterialMap[concept.concept_id];
+      return material?.lifecycle_status ?? concept.material_status;
+    },
+    [latestMaterialMap]
+  );
+  const approvedMaterials = useMemo(() => {
+    if (!activeMaterials) {
+      return [];
+    }
+    return activeMaterials.filter((material) =>
+      ["approved", "published"].includes(material.lifecycle_status)
+    );
+  }, [activeMaterials]);
   const hasRunningJobs = useMemo(() => {
     if (!activeSubjectId) {
       return false;
@@ -124,9 +156,9 @@ export const AdminDashboard: React.FC = () => {
       return false;
     }
     return activeSubject.concepts.every((concept) =>
-      ["approved", "published"].includes(concept.material_status)
+      ["approved", "published"].includes(resolveConceptStatus(concept))
     );
-  }, [activeSubject]);
+  }, [activeSubject, resolveConceptStatus]);
 
   const selectedConcepts = useMemo(() => {
     if (!activeSubject) {
@@ -142,9 +174,9 @@ export const AdminDashboard: React.FC = () => {
       return false;
     }
     return selectedConcepts.every((concept) =>
-      ["approved", "published"].includes(concept.material_status)
+      ["approved", "published"].includes(resolveConceptStatus(concept))
     );
-  }, [selectedConcepts]);
+  }, [selectedConcepts, resolveConceptStatus]);
 
   const activeConceptIds = useMemo(() => {
     if (!activeSubject) {
@@ -152,6 +184,49 @@ export const AdminDashboard: React.FC = () => {
     }
     return activeSubject.concepts.map((concept) => concept.concept_id);
   }, [activeSubject]);
+
+  const generatedConceptIds = useMemo(() => {
+    if (!activeSubjectId) {
+      return new Set<string>();
+    }
+    const generated = new Set<string>();
+    Object.values(jobMap).forEach((job) => {
+      if (job.subject_id !== activeSubjectId) {
+        return;
+      }
+      if (job.status !== "completed") {
+        return;
+      }
+      job.concept_ids?.forEach((conceptId) => {
+        generated.add(conceptId);
+      });
+    });
+    return generated;
+  }, [activeSubjectId, jobMap]);
+
+  const ungeneratedConceptIds = useMemo(() => {
+    if (!activeSubject) {
+      return [];
+    }
+    return activeSubject.concepts
+      .filter(
+        (concept) =>
+          concept.material_status === "unavailable" &&
+          !generatedConceptIds.has(concept.concept_id)
+      )
+      .map((concept) => concept.concept_id);
+  }, [activeSubject, generatedConceptIds]);
+
+  const allGenerated = useMemo(() => {
+    if (!activeSubject || !activeSubject.concepts.length) {
+      return false;
+    }
+    return activeSubject.concepts.every(
+      (concept) =>
+        concept.material_status !== "unavailable" ||
+        generatedConceptIds.has(concept.concept_id)
+    );
+  }, [activeSubject, generatedConceptIds]);
 
   const conceptNameMap = useMemo(() => {
     if (!activeSubject) {
@@ -161,6 +236,54 @@ export const AdminDashboard: React.FC = () => {
       activeSubject.concepts.map((concept) => [concept.concept_id, concept.name])
     );
   }, [activeSubject]);
+
+  const pendingReviewGroups = useMemo(() => {
+    if (!activeSubjectId || !activeMaterials) {
+      return [];
+    }
+    const draftMaterials = activeMaterials.filter(
+      (material) => material.lifecycle_status === "draft"
+    );
+    const grouped: Record<string, typeof draftMaterials> = {};
+    draftMaterials.forEach((material) => {
+      const jobId = material.source_job_id;
+      if (!jobId) {
+        return;
+      }
+      if (!grouped[jobId]) {
+        grouped[jobId] = [];
+      }
+      grouped[jobId].push(material);
+    });
+    return Object.entries(grouped)
+      .map(([jobId, materials]) => {
+        const job = jobMap[jobId];
+        if (!job || job.status !== "completed") {
+          return null;
+        }
+        const items = materials.map((material) => ({
+          conceptId: material.concept_id,
+          conceptName: conceptNameMap[material.concept_id] || material.concept_name,
+          artifacts: material.artifact_index
+        }));
+        return {
+          job,
+          items
+        };
+      })
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          new Date(b.job.created_at).getTime() - new Date(a.job.created_at).getTime()
+      ) as Array<{
+      job: MaterialJobStatusResponse;
+      items: Array<{
+        conceptId: string;
+        conceptName: string;
+        artifacts: ConceptMaterialResponse["artifact_index"];
+      }>;
+    }>;
+  }, [activeSubjectId, activeMaterials, jobMap, conceptNameMap]);
 
   const filteredSubjects = useMemo(() => {
     const query = subjectQuery.trim().toLowerCase();
@@ -190,6 +313,8 @@ export const AdminDashboard: React.FC = () => {
     setVideoPreview(null);
     setApprovedVideoId(null);
     setSelectedConceptIds(new Set());
+    setReviewDeleteOpen(false);
+    setReviewDeleteMeta(null);
   }, [activeSubjectId]);
 
   useEffect(() => {
@@ -259,20 +384,64 @@ export const AdminDashboard: React.FC = () => {
   }, [subjects]);
 
   useEffect(() => {
-    // Intentionally disabled auto-polling. Status updates should be user-triggered.
-  }, [jobMap]);
-
-  const handleRefreshJobStatus = async () => {
-    if (!activeJob) {
+    if (!activeJobId) {
       return;
     }
-    try {
-      const updated = await getJobStatus(activeJob.job_id);
-      setJobMap((prev) => ({ ...prev, [activeJob.job_id]: updated }));
-    } catch {
-      // ignore refresh errors
+    if (!activeJobStatus || !["queued", "running"].includes(activeJobStatus)) {
+      return;
     }
-  };
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const updated = await getJobStatus(activeJobId);
+        if (!cancelled) {
+          setJobMap((prev) => ({ ...prev, [activeJobId]: updated }));
+        }
+      } catch {
+        // ignore polling errors
+      }
+    };
+    poll();
+    const interval = window.setInterval(poll, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeJobId, activeJobStatus]);
+
+  const refreshSubjectData = useCallback(
+    async (subjectId: string) => {
+      const [materials, refreshed] = await Promise.all([
+        listAdminSubjectMaterials(subjectId),
+        getSubject(subjectId)
+      ]);
+      setMaterialsMap((prev) => ({ ...prev, [subjectId]: materials }));
+      setSubjects((prev) =>
+        prev.map((subject) =>
+          subject.subject_id === subjectId ? refreshed : subject
+        )
+      );
+    },
+    [getSubject, listAdminSubjectMaterials]
+  );
+
+  useEffect(() => {
+    if (!activeJobId || !activeSubjectId) {
+      jobStatusRef.current = null;
+      return;
+    }
+    const currentStatus = activeJobStatus ?? null;
+    const previousStatus = jobStatusRef.current;
+    if (
+      currentStatus &&
+      previousStatus &&
+      currentStatus !== previousStatus &&
+      ["completed", "failed"].includes(currentStatus)
+    ) {
+      refreshSubjectData(activeSubjectId).catch(() => null);
+    }
+    jobStatusRef.current = currentStatus;
+  }, [activeJobId, activeJobStatus, activeSubjectId, refreshSubjectData]);
 
   const handleCreateSubject = async () => {
     setLoading(true);
@@ -332,9 +501,11 @@ export const AdminDashboard: React.FC = () => {
     setError(null);
     try {
       const conceptIds =
-        selectedConceptIds.size > 0 ? Array.from(selectedConceptIds) : activeConceptIds;
+        selectedConceptIds.size > 0
+          ? Array.from(selectedConceptIds)
+          : ungeneratedConceptIds;
       if (!conceptIds.length) {
-        setError("Select at least one topic to generate.");
+        setError("All topics already have study material. Select topics to regenerate.");
         return;
       }
       const payload: AdminMaterialJobCreate = {
@@ -352,25 +523,23 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleApproveJob = async () => {
-    if (!activeJob) {
+  const approveJobConcepts = async (
+    jobId: string,
+    subjectId: string,
+    conceptIds: string[]
+  ) => {
+    if (!conceptIds.length) {
+      setError("Select at least one topic to approve.");
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const response = await approveJob(activeJob.job_id, {
-        concept_ids: activeJob.concept_ids
+      const response = await approveJob(jobId, {
+        concept_ids: conceptIds
       });
-      setJobMap((prev) => ({ ...prev, [activeJob.job_id]: response }));
-      const materials = await listAdminSubjectMaterials(activeJob.subject_id);
-      setMaterialsMap((prev) => ({ ...prev, [activeJob.subject_id]: materials }));
-      const refreshed = await getSubject(activeJob.subject_id);
-      setSubjects((prev) =>
-        prev.map((subject) =>
-          subject.subject_id === activeJob.subject_id ? refreshed : subject
-        )
-      );
+      setJobMap((prev) => ({ ...prev, [jobId]: response }));
+      await refreshSubjectData(subjectId);
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Approval failed.");
     } finally {
@@ -451,11 +620,16 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleDownloadBundle = async () => {
-    if (!activeJob) {
+  const handleDownloadApprovedBundle = async () => {
+    if (!activeSubjectId) {
       return;
     }
-    await downloadAdminJobZip(activeJob.job_id);
+    setError(null);
+    try {
+      await downloadApprovedMaterialsBundle(activeSubjectId);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to download approved bundle.");
+    }
   };
 
   const handleToggleConceptSelection = (conceptId: string) => {
@@ -474,11 +648,11 @@ export const AdminDashboard: React.FC = () => {
     if (!activeSubject?.concepts.length) {
       return;
     }
+    if (selectedConceptIds.size) {
+      setSelectedConceptIds(new Set());
+      return;
+    }
     setSelectedConceptIds(new Set(activeSubject.concepts.map((concept) => concept.concept_id)));
-  };
-
-  const handleClearSelectedConcepts = () => {
-    setSelectedConceptIds(new Set());
   };
 
   const getConceptStatusMeta = (status: ConceptMaterialResponse["lifecycle_status"] | SubjectResponse["concepts"][number]["material_status"]) => {
@@ -505,6 +679,14 @@ export const AdminDashboard: React.FC = () => {
   const toSafeFilename = (value: string) => {
     const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     return slug || "material";
+  };
+
+  const formatJobDate = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "Unknown time";
+    }
+    return date.toLocaleString();
   };
 
   const openPreview = async (options: {
@@ -677,6 +859,16 @@ export const AdminDashboard: React.FC = () => {
     setApprovedVideoId(null);
   };
 
+  const handleOpenReviewDelete = (jobId: string, conceptId: string, conceptName: string) => {
+    setReviewDeleteMeta({ jobId, conceptId, conceptName });
+    setReviewDeleteOpen(true);
+  };
+
+  const handleCloseReviewDelete = () => {
+    setReviewDeleteOpen(false);
+    setReviewDeleteMeta(null);
+  };
+
   const handleOpenVideo = (resource: ResourceItem) => {
     const embedUrl = toYouTubeEmbed(resource.url);
     if (!embedUrl) {
@@ -684,6 +876,27 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
     setVideoPreview({ title: resource.title, embedUrl });
+  };
+
+  const handleConfirmReviewDelete = async () => {
+    if (!reviewDeleteMeta) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await discardJobConcept(
+        reviewDeleteMeta.jobId,
+        reviewDeleteMeta.conceptId
+      );
+      setJobMap((prev) => ({ ...prev, [response.job_id]: response }));
+      handleCloseReviewDelete();
+      await refreshSubjectData(response.subject_id);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to delete generated material.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCloseVideo = () => {
@@ -970,10 +1183,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                 <div className="inline-actions">
                   <Button variant="ghost" size="sm" onClick={handleSelectAllConcepts}>
-                    Select All
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={handleClearSelectedConcepts}>
-                    Clear
+                    {selectedConceptIds.size ? "Unselect All" : "Select All"}
                   </Button>
                   <Button variant="secondary" onClick={() => setShowConceptModal(true)}>
                     Add Topics
@@ -990,7 +1200,7 @@ export const AdminDashboard: React.FC = () => {
                       }`}
                     >
                       {(() => {
-                        const statusMeta = getConceptStatusMeta(concept.material_status);
+                        const statusMeta = getConceptStatusMeta(resolveConceptStatus(concept));
                         return (
                           <span className={`topic-ribbon ${statusMeta.tone}`}>
                             {statusMeta.label}
@@ -1021,28 +1231,98 @@ export const AdminDashboard: React.FC = () => {
                   description="Add at least one topic before generating study materials."
                 />
               )}
+              {pendingReviewGroups.length ? (
+                <div className="review-section">
+                  <div className="section-header">
+                    <div>
+                      <h4>Pending Review</h4>
+                      <p className="muted">
+                        Review regenerated topics and approve only what should replace the
+                        current version.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="review-group-list">
+                    {pendingReviewGroups.map((group) => {
+                      return (
+                        <div key={group.job.job_id} className="review-group">
+                          <div className="section-header">
+                            <div>
+                              <h4>Generation Run • {formatJobDate(group.job.created_at)}</h4>
+                              <p className="muted">
+                                {group.items.length} topics awaiting approval
+                              </p>
+                            </div>
+                          </div>
+                          <div className="material-list review-list">
+                            {group.items.map((item) => (
+                              <div
+                                key={item.conceptId}
+                                className="material-card review-card"
+                              >
+                                <div>
+                                  <h4>{item.conceptName}</h4>
+                                  <p className="muted">New material ready for approval</p>
+                                </div>
+                                <div className="review-actions">
+                                  {renderArtifactActions({
+                                    conceptId: item.conceptId,
+                                    conceptName: item.conceptName,
+                                    jobId: group.job.job_id,
+                                    artifactIndex: item.artifacts
+                                  })}
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="review-approve"
+                                    onClick={() =>
+                                      approveJobConcepts(
+                                        group.job.job_id,
+                                        group.job.subject_id,
+                                        [item.conceptId]
+                                      )
+                                    }
+                                    disabled={loading}
+                                  >
+                                    Approve This Topic
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="danger"
+                                    onClick={() =>
+                                      handleOpenReviewDelete(
+                                        group.job.job_id,
+                                        item.conceptId,
+                                        item.conceptName
+                                      )
+                                    }
+                                  >
+                                    Delete Draft
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </div>
             <div className="section">
               <div className="section-header">
                 <h4>Generation</h4>
               </div>
               <div className="inline-actions">
-                <Button
-                  onClick={handleGenerateMaterial}
-                  disabled={!activeSubject.concepts.length || loading}
-                >
-                  {selectedConceptIds.size
-                    ? `Generate Selected (${selectedConceptIds.size})`
-                    : "Generate All Topics"}
-                </Button>
-                {activeJob ? (
-                  <Button variant="ghost" onClick={handleRefreshJobStatus}>
-                    Refresh Status
-                  </Button>
-                ) : null}
-                {activeJob?.status === "completed" ? (
-                  <Button variant="secondary" onClick={handleDownloadBundle}>
-                    Download Bundle
+                {selectedConceptIds.size || !allGenerated ? (
+                  <Button
+                    onClick={handleGenerateMaterial}
+                    disabled={!activeSubject.concepts.length || loading}
+                  >
+                    {selectedConceptIds.size
+                      ? `Generate Selected (${selectedConceptIds.size})`
+                      : "Generate Remaining Topics"}
                   </Button>
                 ) : null}
               </div>
@@ -1052,13 +1332,6 @@ export const AdminDashboard: React.FC = () => {
                   subjectName={activeSubject?.name}
                   conceptNameMap={conceptNameMap}
                 />
-              ) : null}
-              {activeJob?.status === "completed" && activeJob.review_status !== "approved" ? (
-                <div className="inline-actions">
-                  <Button variant="secondary" onClick={handleApproveJob}>
-                    Approve Materials
-                  </Button>
-                </div>
               ) : null}
               {selectedConceptIds.size ? (
                 <>
@@ -1102,16 +1375,21 @@ export const AdminDashboard: React.FC = () => {
 
         <Card className="panel">
           <div className="panel-header">
-            <h3>Generated Materials</h3>
+            <h3>Approved Materials</h3>
+            {approvedMaterials.length ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleDownloadApprovedBundle}
+                disabled={loading}
+              >
+                Download Approved Bundle
+              </Button>
+            ) : null}
           </div>
-          {activeJob?.status === "completed" && activeJob.review_status !== "approved" ? (
-            <div className="review-note">
-              Review the generated materials below before approving.
-            </div>
-          ) : null}
-          {activeMaterials && activeMaterials.length ? (
+          {approvedMaterials.length ? (
             <div className="material-list">
-              {activeMaterials.map((material) => (
+              {approvedMaterials.map((material) => (
                 <div key={material.concept_id} className="material-card">
                   <div>
                     <h4>{material.concept_name}</h4>
@@ -1126,33 +1404,10 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               ))}
             </div>
-          ) : activeJob?.status === "completed" && activeSubject ? (
-            <div className="material-list">
-              {activeSubject.concepts.map((concept) => {
-                const artifacts = activeJob.concept_artifacts[concept.concept_id];
-                if (!artifacts) {
-                  return null;
-                }
-                return (
-                  <div key={concept.concept_id} className="material-card">
-                    <div>
-                      <h4>{concept.name}</h4>
-                      <p className="muted">Ready for review</p>
-                    </div>
-                    {renderArtifactActions({
-                      conceptId: concept.concept_id,
-                      conceptName: concept.name,
-                      jobId: activeJob.job_id,
-                      artifactIndex: artifacts
-                    })}
-                  </div>
-                );
-              })}
-            </div>
           ) : (
             <EmptyState
-              title="No materials yet"
-              description="Generate and approve materials to see them listed here."
+              title="No approved materials yet"
+              description="Approve generated topics to publish them here."
             />
           )}
         </Card>
@@ -1296,6 +1551,28 @@ export const AdminDashboard: React.FC = () => {
         <p>
           This will permanently delete the syllabus, all topics, generated materials, jobs, and
           resources. This action cannot be undone.
+        </p>
+      </Modal>
+
+      <Modal
+        open={reviewDeleteOpen}
+        title="Delete Generated Draft"
+        onClose={handleCloseReviewDelete}
+        footer={
+          <div className="inline-actions">
+            <Button variant="ghost" onClick={handleCloseReviewDelete}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleConfirmReviewDelete} disabled={loading}>
+              {loading ? "Deleting..." : "Delete Draft"}
+            </Button>
+          </div>
+        }
+      >
+        <p>
+          This will remove the generated draft for{" "}
+          <strong>{reviewDeleteMeta?.conceptName}</strong> from this review queue and delete its
+          draft files. Approved materials will remain unchanged.
         </p>
       </Modal>
 

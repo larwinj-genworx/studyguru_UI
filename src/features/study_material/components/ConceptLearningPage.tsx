@@ -37,6 +37,7 @@ export const ConceptLearningPage: React.FC = () => {
   const [editValue, setEditValue] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [bookmarks, setBookmarks] = useState<ConceptBookmarkResponse[]>([]);
+  const [detailedFocusMap, setDetailedFocusMap] = useState<Record<string, number>>({});
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
@@ -258,7 +259,9 @@ export const ConceptLearningPage: React.FC = () => {
         </aside>
 
         <main className="learning-content">
-          {visibleSections.map((section) => renderSection(section, sectionRefs))}
+          {visibleSections.map((section) =>
+            renderSection(section, sectionRefs, detailedFocusMap, setDetailedFocusMap)
+          )}
         </main>
       </div>
 
@@ -492,7 +495,9 @@ const getSectionDisplayTitle = (section: LearningSection) => {
 
 const renderSection = (
   section: LearningSection,
-  refs: React.MutableRefObject<Record<string, HTMLElement | null>>
+  refs: React.MutableRefObject<Record<string, HTMLElement | null>>,
+  detailedFocusMap: Record<string, number>,
+  setDetailedFocusMap: React.Dispatch<React.SetStateAction<Record<string, number>>>
 ): React.ReactNode => {
   const HeadingTag = section.level === 3 ? "h3" : "h2";
   const isStep = isStepSection(section);
@@ -516,7 +521,7 @@ const renderSection = (
     <div key={`${section.id}-block-${index}`}>
       {renderBlock(block, {
         sectionTitle: section.title,
-        isDetailed,
+        isDetailed: false,
         isStep,
         stepTitle: stepMeta?.title,
         stepNumber: stepMeta?.number,
@@ -524,8 +529,50 @@ const renderSection = (
       })}
     </div>
   ));
+  const detailedItems = isDetailed
+    ? buildDetailedItems(section.blocks, {
+        sectionTitle: section.title,
+        isDetailed: true,
+        isStep,
+        stepTitle: stepMeta?.title,
+        stepNumber: stepMeta?.number,
+        skipParagraphText
+      })
+    : [];
+  const detailedActiveIndex = isDetailed
+    ? Math.min(
+        Math.max(detailedFocusMap[section.id] ?? 0, 0),
+        Math.max(detailedItems.length - 1, 0)
+      )
+    : 0;
   const blockContent = isDetailed ? (
-    <div className="learning-explain-stack">{blockNodes}</div>
+    <div className="learning-explain-stack">
+      {detailedItems.map((item, index) => {
+        const isActive = index === detailedActiveIndex;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            className={`learning-explain-card ${isActive ? "active" : "dimmed"}`}
+            aria-expanded={isActive}
+            onClick={() =>
+              setDetailedFocusMap((prev) => ({ ...prev, [section.id]: index }))
+            }
+          >
+            <div className="learning-explain-index">{index + 1}</div>
+            <div className="learning-explain-body">
+              <p className="learning-explain-lead">{item.lead}</p>
+              <div className={`learning-explain-content ${isActive ? "open" : ""}`}>
+                {item.body}
+              </div>
+              <span className="learning-explain-toggle">
+                {isActive ? "Focused" : "Tap to expand"}
+              </span>
+            </div>
+          </button>
+        );
+      })}
+    </div>
   ) : (
     <>{blockNodes}</>
   );
@@ -556,10 +603,27 @@ const renderSection = (
           {blockContent}
         </>
       )}
-      {section.children?.map((child) => renderSection(child, refs))}
+      {section.children?.map((child) =>
+        renderSection(child, refs, detailedFocusMap, setDetailedFocusMap)
+      )}
     </section>
   );
 };
+
+const renderListBlock = (block: { style: "bullet" | "number"; items: string[] }) =>
+  block.style === "number" ? (
+    <ol className="learning-list">
+      {block.items.map((item, index) => (
+        <li key={`${item}-${index}`}>{item}</li>
+      ))}
+    </ol>
+  ) : (
+    <ul className="learning-list">
+      {block.items.map((item, index) => (
+        <li key={`${item}-${index}`}>{item}</li>
+      ))}
+    </ul>
+  );
 
 const renderBlock = (block: LearningBlock, context?: BlockRenderContext) => {
   switch (block.type) {
@@ -573,41 +637,9 @@ const renderBlock = (block: LearningBlock, context?: BlockRenderContext) => {
       if (context?.isStep && context.sectionTitle && isRedundantStepParagraph(context.sectionTitle, block.text)) {
         return null;
       }
-      if (context?.isDetailed) {
-        const chunks = splitParagraphChunks(block.text);
-        return (
-          <div className="learning-explain-card">
-            {chunks.map((chunk, index) => (
-              <p key={`${chunk}-${index}`} className="learning-paragraph">
-                {chunk}
-              </p>
-            ))}
-          </div>
-        );
-      }
       return <p className="learning-paragraph">{block.text}</p>;
     case "list":
-      {
-        const listNode =
-          block.style === "number" ? (
-            <ol className="learning-list">
-              {block.items.map((item, index) => (
-                <li key={`${item}-${index}`}>{item}</li>
-              ))}
-            </ol>
-          ) : (
-            <ul className="learning-list">
-              {block.items.map((item, index) => (
-                <li key={`${item}-${index}`}>{item}</li>
-              ))}
-            </ul>
-          );
-        return context?.isDetailed ? (
-          <div className="learning-explain-card">{listNode}</div>
-        ) : (
-          listNode
-        );
-      }
+      return renderListBlock(block);
     case "formula":
       return (
         <div className="formula-block">
@@ -679,6 +711,63 @@ const renderBlock = (block: LearningBlock, context?: BlockRenderContext) => {
     default:
       return null;
   }
+};
+
+const buildDetailedItems = (
+  blocks: LearningBlock[],
+  context?: BlockRenderContext
+) => {
+  const items: Array<{ key: string; lead: string; body: React.ReactNode }> = [];
+  blocks.forEach((block, blockIndex) => {
+    if (block.type === "paragraph") {
+      if (context?.skipParagraphText) {
+        const target = normalizeText(context.skipParagraphText);
+        if (target && normalizeText(block.text) === target) {
+          return;
+        }
+      }
+      const chunks = splitParagraphChunks(block.text);
+      chunks.forEach((chunk, chunkIndex) => {
+        const sentences = splitSentences(chunk);
+        const lead = sentences[0] || chunk;
+        const rest =
+          sentences.length > 1 ? sentences.slice(1).join(" ").trim() : "";
+        items.push({
+          key: `detailed-paragraph-${blockIndex}-${chunkIndex}`,
+          lead,
+          body: rest ? <p className="learning-paragraph">{rest}</p> : null
+        });
+      });
+      return;
+    }
+    if (block.type === "list") {
+      items.push({
+        key: `detailed-list-${blockIndex}`,
+        lead: "Key Points",
+        body: renderListBlock(block)
+      });
+      return;
+    }
+    const node = renderBlock(block, { ...context, isDetailed: false });
+    if (node) {
+      let lead = "Focus Note";
+      if (block.type === "formula") {
+        lead = block.title?.trim() || "Formula";
+      } else if (block.type === "example") {
+        lead = block.title?.trim() || "Example";
+      } else if (block.type === "callout") {
+        lead = block.title?.trim() || "Important";
+      } else if (block.type === "code") {
+        lead = "Code Example";
+      }
+      items.push({
+        key: `detailed-block-${blockIndex}`,
+        lead,
+        body: node
+      });
+    }
+  });
+  return items;
 };
 
 const flattenSections = (sections: LearningSection[]) => {

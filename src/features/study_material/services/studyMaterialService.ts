@@ -80,6 +80,16 @@ export const approveJob = async (
   return response.data;
 };
 
+export const discardJobConcept = async (
+  jobId: string,
+  conceptId: string
+): Promise<MaterialJobStatusResponse> => {
+  const response = await api.delete(
+    `${BASE_PATH}/admin/material-jobs/${jobId}/concepts/${conceptId}`
+  );
+  return response.data;
+};
+
 export const publishSubject = async (subjectId: string): Promise<SubjectResponse> => {
   const response = await api.post(`${BASE_PATH}/admin/subjects/${subjectId}/publish`, {});
   return response.data;
@@ -225,6 +235,14 @@ export const downloadAdminJobZip = async (jobId: string) => {
     responseType: "blob"
   });
   downloadBlob(response.data, `study-material-${jobId}.zip`);
+};
+
+export const downloadApprovedMaterialsBundle = async (subjectId: string) => {
+  const response = await api.get(
+    `${BASE_PATH}/admin/subjects/${subjectId}/approved-materials.zip`,
+    { responseType: "blob" }
+  );
+  downloadBlob(response.data, `approved-materials-${subjectId}.zip`);
 };
 
 export const downloadAdminJobArtifact = async (jobId: string, artifactName: string) => {
