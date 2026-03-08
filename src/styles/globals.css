@@ -1745,6 +1745,398 @@ p {
   place-items: center;
 }
 
+.learning-bot-shell {
+  position: fixed;
+  right: 1.35rem;
+  bottom: 1.35rem;
+  z-index: 35;
+}
+
+.learning-bot-launcher {
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 0.9rem;
+  align-items: center;
+  min-width: 260px;
+  padding: 0.9rem 1rem;
+  border: none;
+  border-radius: 22px;
+  color: #fff;
+  cursor: pointer;
+  background:
+    radial-gradient(circle at top left, rgba(255, 216, 149, 0.36), rgba(255, 216, 149, 0) 46%),
+    linear-gradient(145deg, #15304e 0%, #1f4f82 52%, #2c6daa 100%);
+  box-shadow: 0 26px 48px rgba(17, 33, 57, 0.28);
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.learning-bot-launcher:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 32px 56px rgba(17, 33, 57, 0.34);
+}
+
+.learning-bot-launcher.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.learning-bot-launcher-ring {
+  position: absolute;
+  inset: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  pointer-events: none;
+}
+
+.learning-bot-launcher-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px);
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.learning-bot-launcher-copy {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  gap: 0.12rem;
+}
+
+.learning-bot-launcher-copy strong {
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.learning-bot-launcher-copy small {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.learning-bot-panel {
+  width: min(410px, calc(100vw - 2rem));
+  height: min(720px, calc(100vh - 2.2rem));
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  border-radius: 28px;
+  overflow: hidden;
+  border: 1px solid rgba(31, 79, 130, 0.22);
+  background:
+    linear-gradient(180deg, rgba(249, 252, 255, 0.98), rgba(237, 244, 255, 0.96)),
+    #fff;
+  box-shadow: 0 34px 80px rgba(15, 23, 42, 0.2);
+  backdrop-filter: blur(16px);
+}
+
+.learning-bot-header {
+  padding: 1.1rem 1.15rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  background:
+    radial-gradient(circle at top right, rgba(242, 179, 74, 0.28), rgba(242, 179, 74, 0) 34%),
+    linear-gradient(155deg, #12314f 0%, #1b4a78 58%, #255c91 100%);
+  color: #fff;
+}
+
+.learning-bot-header h3 {
+  color: #fff;
+  font-size: 1.35rem;
+  margin-bottom: 0.2rem;
+}
+
+.learning-bot-kicker {
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.82;
+  margin-bottom: 0.35rem;
+}
+
+.learning-bot-subtitle {
+  font-size: 0.92rem;
+  color: rgba(255, 255, 255, 0.82);
+  max-width: 290px;
+  line-height: 1.5;
+}
+
+.learning-bot-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.learning-bot-header-actions .button.ghost {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.learning-bot-close {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.86);
+  cursor: pointer;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.learning-bot-body {
+  padding: 1rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(245, 249, 255, 0.98)),
+    radial-gradient(circle at top left, rgba(31, 79, 130, 0.08), rgba(31, 79, 130, 0) 35%);
+}
+
+.learning-bot-state,
+.learning-bot-empty {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.learning-bot-state {
+  gap: 0.8rem;
+}
+
+.learning-bot-state .spinner {
+  width: 54px;
+}
+
+.learning-bot-empty-card {
+  padding: 1.25rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(31, 79, 130, 0.14);
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.08);
+}
+
+.learning-bot-empty-label {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.learning-bot-empty h4 {
+  font-size: 1.1rem;
+  margin: 0.4rem 0 0.55rem;
+}
+
+.learning-bot-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.learning-bot-message.user {
+  align-items: flex-end;
+}
+
+.learning-bot-message.assistant {
+  align-items: flex-start;
+}
+
+.learning-bot-message-meta {
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 0 0.25rem;
+}
+
+.learning-bot-bubble {
+  max-width: 90%;
+  padding: 0.95rem 1rem;
+  border-radius: 20px;
+  line-height: 1.6;
+  box-shadow: 0 14px 24px rgba(15, 23, 42, 0.08);
+}
+
+.learning-bot-message.user .learning-bot-bubble {
+  background: linear-gradient(145deg, #1f4f82 0%, #2c6daa 100%);
+  color: #fff;
+  border-bottom-right-radius: 8px;
+}
+
+.learning-bot-message.assistant .learning-bot-bubble {
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--ink-1);
+  border: 1px solid rgba(31, 79, 130, 0.12);
+  border-bottom-left-radius: 8px;
+}
+
+.learning-bot-bubble.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 82px;
+}
+
+.learning-bot-bubble.typing span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(31, 79, 130, 0.52);
+  animation: learning-bot-typing 1s infinite ease-in-out;
+}
+
+.learning-bot-bubble.typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.learning-bot-bubble.typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes learning-bot-typing {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.learning-bot-rich-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.48rem;
+}
+
+.learning-bot-rich-text p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.learning-bot-list-line {
+  padding-left: 0.1rem;
+}
+
+.learning-bot-spacer {
+  height: 0.3rem;
+}
+
+.learning-bot-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.15rem;
+  max-width: 92%;
+}
+
+.learning-bot-citation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 14px;
+  border: 1px solid rgba(31, 79, 130, 0.14);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--ink-1);
+  min-width: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.learning-bot-citation:hover {
+  transform: translateY(-1px);
+  border-color: rgba(31, 79, 130, 0.32);
+  box-shadow: 0 12px 22px rgba(15, 23, 42, 0.07);
+}
+
+.learning-bot-citation span {
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.learning-bot-citation small {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.learning-bot-footer {
+  padding: 0.95rem 1rem 1rem;
+  border-top: 1px solid rgba(31, 79, 130, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.learning-bot-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.learning-bot-suggestion {
+  border: 1px solid rgba(31, 79, 130, 0.14);
+  background: rgba(31, 79, 130, 0.06);
+  color: var(--primary);
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.88rem;
+  transition: background 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+}
+
+.learning-bot-suggestion:hover {
+  background: rgba(31, 79, 130, 0.12);
+  border-color: rgba(31, 79, 130, 0.26);
+  transform: translateY(-1px);
+}
+
+.learning-bot-composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.7rem;
+  align-items: flex-end;
+}
+
+.learning-bot-composer textarea {
+  width: 100%;
+  resize: none;
+  border-radius: 18px;
+  border: 1px solid rgba(31, 79, 130, 0.16);
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+  padding: 0.85rem 0.95rem;
+  font: inherit;
+  color: var(--ink-1);
+  min-height: 64px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.learning-bot-composer textarea:focus {
+  outline: 2px solid rgba(31, 79, 130, 0.22);
+  border-color: rgba(31, 79, 130, 0.34);
+}
+
 .quiz-shell {
   display: flex;
   flex-direction: column;
@@ -2130,6 +2522,41 @@ p {
   }
   .quiz-stat-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .learning-bot-shell {
+    right: 0.75rem;
+    left: 0.75rem;
+    bottom: 0.75rem;
+  }
+  .learning-bot-panel {
+    width: 100%;
+    height: min(76vh, 680px);
+    border-radius: 24px;
+  }
+  .learning-bot-launcher {
+    width: 100%;
+    min-width: 0;
+  }
+  .learning-bot-header {
+    padding: 1rem;
+  }
+  .learning-bot-subtitle {
+    max-width: none;
+  }
+  .learning-bot-body {
+    padding: 0.85rem;
+  }
+  .learning-bot-footer {
+    padding: 0.85rem;
+  }
+  .learning-bot-composer {
+    grid-template-columns: 1fr;
+  }
+  .learning-bot-composer .button {
+    width: 100%;
+  }
+  .learning-bot-bubble {
+    max-width: 96%;
   }
 }
 

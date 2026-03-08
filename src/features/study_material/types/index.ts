@@ -84,6 +84,50 @@ export interface LearningContentResponse {
   content: LearningContent;
 }
 
+export interface LearningBotCitation {
+  source_id: string;
+  label: string;
+  source_type: string;
+  url?: string | null;
+  section_id?: string | null;
+  note?: string | null;
+}
+
+export interface LearningBotMessageResponse {
+  message_id: string;
+  role: "user" | "assistant";
+  content: string;
+  citations: LearningBotCitation[];
+  follow_up_suggestions: string[];
+  meta: Record<string, any>;
+  created_at: string;
+}
+
+export interface LearningBotSessionResponse {
+  session_id: string;
+  subject_id: string;
+  subject_name: string;
+  concept_id: string;
+  concept_name: string;
+  grade_level: string;
+  status: "active" | "archived";
+  created_at: string;
+  updated_at: string;
+  last_message_at: string;
+}
+
+export interface LearningBotSessionDetailResponse {
+  session: LearningBotSessionResponse;
+  messages: LearningBotMessageResponse[];
+  suggested_prompts: string[];
+}
+
+export interface LearningBotTurnResponse {
+  session: LearningBotSessionResponse;
+  user_message: LearningBotMessageResponse;
+  assistant_message: LearningBotMessageResponse;
+}
+
 export interface ConceptBookmarkResponse {
   concept_id: string;
   concept_name: string;

@@ -8,6 +8,8 @@ import type {
   ConceptMaterialResponse,
   ConceptBookmarkResponse,
   ConceptResourcesResponse,
+  LearningBotSessionDetailResponse,
+  LearningBotTurnResponse,
   LearningContentResponse,
   MaterialJobStatusResponse,
   ResourceItem,
@@ -156,6 +158,39 @@ export const getStudentLearningContent = async (
 ): Promise<LearningContentResponse> => {
   const response = await api.get(
     `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/learning`
+  );
+  return response.data;
+};
+
+export const getLearningBotSession = async (
+  subjectId: string,
+  conceptId: string
+): Promise<LearningBotSessionDetailResponse> => {
+  const response = await api.get(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/learning-bot/session`
+  );
+  return response.data;
+};
+
+export const sendLearningBotMessage = async (
+  subjectId: string,
+  conceptId: string,
+  message: string
+): Promise<LearningBotTurnResponse> => {
+  const response = await api.post(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/learning-bot/messages`,
+    { message }
+  );
+  return response.data;
+};
+
+export const resetLearningBotSession = async (
+  subjectId: string,
+  conceptId: string
+): Promise<LearningBotSessionDetailResponse> => {
+  const response = await api.post(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/learning-bot/session/reset`,
+    {}
   );
   return response.data;
 };
