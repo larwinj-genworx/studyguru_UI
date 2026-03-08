@@ -8,6 +8,7 @@ import { TextArea } from "@/components/ui/TextArea";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { EmptyState } from "@/components/common/EmptyState";
 import { useAppSelector } from "@/hooks/useAppSelector";
+import { LearningBotWidget } from "@/features/study_material/components/LearningBotWidget";
 import {
   addStudentBookmark,
   getAdminLearningContent,
@@ -308,6 +309,15 @@ export const ConceptLearningPage: React.FC = () => {
           />
         </div>
       </Modal>
+
+      {role === "student" && subjectId && conceptId ? (
+        <LearningBotWidget
+          subjectId={subjectId}
+          conceptId={conceptId}
+          conceptName={content.concept_name}
+          onNavigateToSection={handleScrollTo}
+        />
+      ) : null}
     </div>
   );
 };
