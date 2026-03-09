@@ -136,6 +136,35 @@ export interface LearningBotTurnResponse {
   assistant_message: LearningBotMessageResponse;
 }
 
+export type ConceptImageStatus = "pending" | "approved" | "rejected";
+
+export interface ConceptImageAssetResponse {
+  image_id: string;
+  status: ConceptImageStatus;
+  title: string;
+  caption?: string | null;
+  alt_text?: string | null;
+  intent_label?: string | null;
+  source_page_url?: string | null;
+  source_image_url?: string | null;
+  source_domain?: string | null;
+  width?: number | null;
+  height?: number | null;
+  mime_type?: string | null;
+  relevance_score: number;
+  created_at: string;
+  approved_at?: string | null;
+}
+
+export interface ConceptImageCollectionResponse {
+  subject_id: string;
+  subject_name: string;
+  concept_id: string;
+  concept_name: string;
+  material_version: number;
+  images: ConceptImageAssetResponse[];
+}
+
 export interface ConceptBookmarkResponse {
   concept_id: string;
   concept_name: string;
