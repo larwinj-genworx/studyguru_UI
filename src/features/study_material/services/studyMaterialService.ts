@@ -7,6 +7,7 @@ import type {
   ConceptBulkCreate,
   ConceptMaterialResponse,
   ConceptBookmarkResponse,
+  ConceptImageCollectionResponse,
   ConceptResourcesResponse,
   LearningBotSessionDetailResponse,
   LearningBotTurnResponse,
@@ -211,6 +212,89 @@ export const getAdminConceptResources = async (
     `${BASE_PATH}/admin/subjects/${subjectId}/concepts/${conceptId}/resources`
   );
   return response.data;
+};
+
+export const getAdminConceptImages = async (
+  subjectId: string,
+  conceptId: string
+): Promise<ConceptImageCollectionResponse> => {
+  const response = await api.get(
+    `${BASE_PATH}/admin/subjects/${subjectId}/concepts/${conceptId}/images`
+  );
+  return response.data;
+};
+
+export const generateAdminConceptImages = async (
+  subjectId: string,
+  conceptId: string,
+  refresh = false
+): Promise<ConceptImageCollectionResponse> => {
+  const response = await api.post(
+    `${BASE_PATH}/admin/subjects/${subjectId}/concepts/${conceptId}/images/generate`,
+    null,
+    { params: { refresh } }
+  );
+  return response.data;
+};
+
+export const approveAdminConceptImage = async (
+  subjectId: string,
+  conceptId: string,
+  imageId: string
+): Promise<ConceptImageCollectionResponse> => {
+  const response = await api.post(
+    `${BASE_PATH}/admin/subjects/${subjectId}/concepts/${conceptId}/images/${imageId}/approve`,
+    {}
+  );
+  return response.data;
+};
+
+export const rejectAdminConceptImage = async (
+  subjectId: string,
+  conceptId: string,
+  imageId: string
+): Promise<ConceptImageCollectionResponse> => {
+  const response = await api.post(
+    `${BASE_PATH}/admin/subjects/${subjectId}/concepts/${conceptId}/images/${imageId}/reject`,
+    {}
+  );
+  return response.data;
+};
+
+export const fetchAdminConceptImageBlob = async (
+  subjectId: string,
+  conceptId: string,
+  imageId: string,
+  variant: "full" | "thumb" = "thumb"
+): Promise<Blob> => {
+  const response = await api.get(
+    `${BASE_PATH}/admin/subjects/${subjectId}/concepts/${conceptId}/images/${imageId}/file`,
+    { params: { variant }, responseType: "blob" }
+  );
+  return response.data as Blob;
+};
+
+export const getStudentConceptImages = async (
+  subjectId: string,
+  conceptId: string
+): Promise<ConceptImageCollectionResponse> => {
+  const response = await api.get(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/images`
+  );
+  return response.data;
+};
+
+export const fetchStudentConceptImageBlob = async (
+  subjectId: string,
+  conceptId: string,
+  imageId: string,
+  variant: "full" | "thumb" = "thumb"
+): Promise<Blob> => {
+  const response = await api.get(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/images/${imageId}/file`,
+    { params: { variant }, responseType: "blob" }
+  );
+  return response.data as Blob;
 };
 
 export const refreshAdminConceptVideo = async (

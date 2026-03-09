@@ -11,6 +11,7 @@ import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { EmptyState } from "@/components/common/EmptyState";
 import { PageHeader } from "@/components/common/PageHeader";
 import { JobProgress } from "@/features/study_material/components/JobProgress";
+import { ConceptImageReviewModal } from "@/features/study_material/components/ConceptImageReviewModal";
 import {
   MaterialPreviewModal,
   type PreviewFileType
@@ -100,6 +101,10 @@ export const AdminDashboard: React.FC = () => {
   } | null>(null);
   const [videoActionLoading, setVideoActionLoading] = useState(false);
   const [approvedVideoId, setApprovedVideoId] = useState<string | null>(null);
+  const [imageReviewMeta, setImageReviewMeta] = useState<{
+    conceptId: string;
+    conceptName: string;
+  } | null>(null);
   const [reviewDeleteOpen, setReviewDeleteOpen] = useState(false);
   const [reviewDeleteMeta, setReviewDeleteMeta] = useState<{
     jobId: string;
@@ -1273,6 +1278,18 @@ export const AdminDashboard: React.FC = () => {
                                   })}
                                   <Button
                                     size="sm"
+                                    variant="ghost"
+                                    onClick={() =>
+                                      setImageReviewMeta({
+                                        conceptId: item.conceptId,
+                                        conceptName: item.conceptName
+                                      })
+                                    }
+                                  >
+                                    Get Related Images
+                                  </Button>
+                                  <Button
+                                    size="sm"
                                     variant="secondary"
                                     className="review-approve"
                                     onClick={() =>
@@ -1679,6 +1696,16 @@ export const AdminDashboard: React.FC = () => {
           </div>
         ) : null}
       </Modal>
+
+      {activeSubjectId && imageReviewMeta ? (
+        <ConceptImageReviewModal
+          open={Boolean(imageReviewMeta)}
+          subjectId={activeSubjectId}
+          conceptId={imageReviewMeta.conceptId}
+          conceptName={imageReviewMeta.conceptName}
+          onClose={() => setImageReviewMeta(null)}
+        />
+      ) : null}
 
       {loading ? (
         <div className="loading-overlay">
