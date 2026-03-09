@@ -2,6 +2,8 @@
 import type {
   AdminMaterialApproveRequest,
   AdminMaterialJobCreate,
+  AdminEnrolledStudentResponse,
+  AdminStudentActivityResponse,
   AdminMaterialPublishRequest,
   FlashcardItem,
   ConceptBulkCreate,
@@ -14,6 +16,7 @@ import type {
   LearningContentResponse,
   MaterialJobStatusResponse,
   ResourceItem,
+  SubjectEnrollmentResponse,
   SubjectCreate,
   SubjectResponse
 } from "@/features/study_material/types";
@@ -119,6 +122,13 @@ export const listPublishedSubjects = async (): Promise<SubjectResponse[]> => {
   return response.data;
 };
 
+export const enrollInSubject = async (
+  subjectId: string
+): Promise<SubjectEnrollmentResponse> => {
+  const response = await api.post(`${BASE_PATH}/student/subjects/${subjectId}/enroll`, {});
+  return response.data;
+};
+
 export const listPublishedConcepts = async (subjectId: string) => {
   const response = await api.get(`${BASE_PATH}/student/subjects/${subjectId}/concepts`);
   return response.data as SubjectResponse["concepts"];
@@ -214,6 +224,19 @@ export const getAdminConceptResources = async (
   return response.data;
 };
 
+export const listAdminEnrolledStudents = async (
+  subjectId: string
+): Promise<AdminEnrolledStudentResponse[]> => {
+  const response = await api.get(`${BASE_PATH}/admin/subjects/${subjectId}/enrollments`);
+  return response.data;
+};
+
+export const getAdminStudentActivity = async (
+  subjectId: string,
+  studentId: string
+): Promise<AdminStudentActivityResponse> => {
+  const response = await api.get(
+    `${BASE_PATH}/admin/subjects/${subjectId}/students/${studentId}/activity`
 export const getAdminConceptImages = async (
   subjectId: string,
   conceptId: string

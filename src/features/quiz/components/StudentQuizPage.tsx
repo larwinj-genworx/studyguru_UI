@@ -119,9 +119,14 @@ export const StudentQuizPage: React.FC = () => {
                 <p className="eyebrow">Final Report</p>
                 <h2>{report.subject_name} Quiz Summary</h2>
                 <p className="muted">
-                  Accuracy: {(report.accuracy * 100).toFixed(1)}% · Correct:{" "}
+                  Accuracy: {(report.accuracy * 100).toFixed(1)}% | First-try correct:{" "}
                   {report.correct_count}/{report.total_questions}
                 </p>
+                {typeof report.meta?.resolved_questions === "number" ? (
+                  <p className="muted">
+                    Resolved after retries: {report.meta.resolved_questions}/{report.total_questions}
+                  </p>
+                ) : null}
               </div>
               <Badge variant="success">Completed</Badge>
             </div>
@@ -131,7 +136,7 @@ export const StudentQuizPage: React.FC = () => {
                   <div>
                     <p className="quiz-topic-title">{topic.concept_name}</p>
                     <p className="muted">
-                      {Math.round(topic.accuracy * 100)}% accuracy ·{" "}
+                      {Math.round(topic.accuracy * 100)}% first-try accuracy |{" "}
                       {topic.correct_count}/{topic.total_questions}
                     </p>
                   </div>

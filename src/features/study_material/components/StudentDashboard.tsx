@@ -16,6 +16,7 @@ import {
 } from "@/features/study_material/components/MaterialPreviewModal";
 import {
   downloadStudentSubjectArtifact,
+  enrollInSubject,
   fetchStudentConceptArtifact,
   fetchStudentSubjectArtifact,
   getStudentFlashcards,
@@ -83,6 +84,7 @@ export const StudentDashboard: React.FC = () => {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [selectedConceptIds, setSelectedConceptIds] = useState<string[]>([]);
   const [quizStarting, setQuizStarting] = useState(false);
+  const [enrollingSubjectId, setEnrollingSubjectId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchSubjects = async () => {
@@ -106,6 +108,13 @@ export const StudentDashboard: React.FC = () => {
     if (!activeSubjectId) {
       return;
     }
+    const selectedSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
+    if (!selectedSubject?.is_enrolled) {
+      setConcepts([]);
+      setMaterials([]);
+      setLoading(false);
+      return;
+    }
     const fetchDetails = async () => {
       setLoading(true);
       try {
@@ -122,16 +131,21 @@ export const StudentDashboard: React.FC = () => {
       }
     };
     fetchDetails();
-  }, [activeSubjectId]);
+  }, [activeSubjectId, subjects]);
 
   useEffect(() => {
     if (!activeSubjectId) {
       return;
     }
+    const selectedSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
+    if (!selectedSubject?.is_enrolled) {
+      setBookmarks([]);
+      return;
+    }
     listStudentBookmarks(activeSubjectId)
       .then((items) => setBookmarks(items))
       .catch(() => setBookmarks([]));
-  }, [activeSubjectId]);
+  }, [activeSubjectId, subjects]);
 
   useEffect(() => {
     setFlashcardMeta(null);
@@ -153,6 +167,7 @@ export const StudentDashboard: React.FC = () => {
   }, [activeSubjectId]);
 
   const activeSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
+  const canAccessActiveSubject = Boolean(activeSubject?.is_enrolled);
   const materialMap = useMemo(() => {
     const map = new Map<string, ConceptMaterialResponse>();
     materials.forEach((material) => map.set(material.concept_id, material));
@@ -390,6 +405,32 @@ export const StudentDashboard: React.FC = () => {
     }
   };
 
+  const handleEnrollSubject = async () => {
+    if (!activeSubject) {
+      return;
+    }
+    setEnrollingSubjectId(activeSubject.subject_id);
+    setError(null);
+    try {
+      const enrollment = await enrollInSubject(activeSubject.subject_id);
+      setSubjects((prev) =>
+        prev.map((subject) =>
+          subject.subject_id === activeSubject.subject_id
+            ? {
+                ...subject,
+                is_enrolled: true,
+                enrolled_at: enrollment.enrolled_at
+              }
+            : subject
+        )
+      );
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to enroll in this syllabus.");
+    } finally {
+      setEnrollingSubjectId(null);
+    }
+  };
+
   return (
     <DashboardLayout title="Student Library" subtitle="Explore published study materials.">
       <PageHeader
@@ -411,9 +452,14 @@ export const StudentDashboard: React.FC = () => {
                   className={`list-item ${activeSubjectId === subject.subject_id ? "active" : ""}`}
                   onClick={() => setActiveSubjectId(subject.subject_id)}
                 >
-                  <div>
-                    <p className="list-title">{subject.name}</p>
-                    <span className="list-subtitle">Grade {subject.grade_level}</span>
+                  <div className="subject-list-row">
+                    <div>
+                      <p className="list-title">{subject.name}</p>
+                      <span className="list-subtitle">Grade {subject.grade_level}</span>
+                    </div>
+                    <Badge variant={subject.is_enrolled ? "success" : "info"}>
+                      {subject.is_enrolled ? "Enrolled" : "Preview"}
+                    </Badge>
                   </div>
                 </button>
               ))}
@@ -436,203 +482,246 @@ export const StudentDashboard: React.FC = () => {
               <div className="panel-header">
                 <div>
                   <h3>{activeSubject.name}</h3>
-                  <p className="muted">Grade {activeSubject.grade_level}</p>
+                  <p className="muted">
+                    Grade {activeSubject.grade_level}
+                    {activeSubject.enrolled_at
+                      ? ` • Enrolled ${new Date(activeSubject.enrolled_at).toLocaleDateString()}`
+                      : ""}
+                  </p>
                 </div>
-                <Badge variant="success">Published</Badge>
+                <Badge variant={canAccessActiveSubject ? "success" : "info"}>
+                  {canAccessActiveSubject ? "Enrolled" : "Preview Only"}
+                </Badge>
               </div>
               {activeSubject.description ? <p>{activeSubject.description}</p> : null}
-              <div className="section">
-                <div className="section-header">
-                  <h4>Subject Pack</h4>
-                </div>
-                <div className="inline-actions">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handlePreviewSubjectArtifact("pdf", "Study Material")}
-                  >
-                    View Study PDF
-                  </Button>
-                                <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      handlePreviewSubjectArtifact("quick_revision_pdf", "Quick Revision")
-                    }
-                  >
-                    Quick Revision
-                  </Button>
-                                <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => downloadStudentSubjectArtifact(activeSubjectId!, "zip")}
-                  >
-                    Full Bundle
-                  </Button>
-                </div>
-                <p className="muted">A combined version of all topics in one file set.</p>
-              </div>
-              <div className="section">
-                <div className="section-header">
-                  <h4>Start a Custom Quiz</h4>
-                  <Badge variant="info">New</Badge>
-                </div>
-                <p className="muted">
-                  Select the topics you want to be tested on. Your quiz is generated uniquely
-                  when you click Start Test.
-                </p>
-                {filteredConcepts.length ? (
-                  <div className="topic-list">
-                    {filteredConcepts.map((concept) => {
-                      const isSelected = selectedConceptIds.includes(concept.concept_id);
-                      return (
-                        <div
-                          key={`quiz-${concept.concept_id}`}
-                          className={`topic-item ${isSelected ? "selected" : ""}`}
-                        >
-                          <span className="topic-ribbon info">Published</span>
-                          <label className="topic-select">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleConceptSelection(concept.concept_id)}
-                            />
-                            <span />
-                          </label>
-                          <div className="topic-content">
-                            <p className="topic-name">{concept.name}</p>
-                            <p className="topic-desc">
-                              {concept.description || "Concept overview"}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
+              {!canAccessActiveSubject ? (
+                <div className="enrollment-preview-card">
+                  <div className="enrollment-preview-header">
+                    <div>
+                      <p className="eyebrow">Student Access Control</p>
+                      <h4>Enroll to unlock the full syllabus</h4>
+                      <p className="muted">
+                        Detailed topics, learning pages, flashcards, resources, and tests stay
+                        hidden until you enroll in this course.
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      onClick={handleEnrollSubject}
+                      disabled={enrollingSubjectId === activeSubject.subject_id}
+                    >
+                      {enrollingSubjectId === activeSubject.subject_id ? "Enrolling..." : "Enroll"}
+                    </Button>
                   </div>
-                ) : (
-                  <EmptyState title="No topics" description="No published topics found." />
-                )}
-                <div className="inline-actions">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={!selectedConceptIds.length || quizStarting}
-                    onClick={handleStartQuiz}
-                  >
-                    {quizStarting ? "Starting..." : "Start Test"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={!selectedConceptIds.length}
-                    onClick={() => setSelectedConceptIds([])}
-                  >
-                    Clear Selection
-                  </Button>
-                  <span className="muted">
-                    {selectedConceptIds.length} topic(s) selected
-                  </span>
+                  <div className="enrollment-preview-grid">
+                    <div className="enrollment-preview-item">
+                      <span>Access unlocks</span>
+                      <strong>Topics, quizzes, PDFs, flashcards</strong>
+                    </div>
+                    <div className="enrollment-preview-item">
+                      <span>Current view</span>
+                      <strong>Syllabus title and description only</strong>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="section">
-                <div className="section-header">
-                  <h4>Topics & Materials</h4>
-                </div>
-                <Input
-                  label="Search topics"
-                  placeholder="Search by topic name or description"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                />
-                {filteredConcepts.length ? (
-                  <div className="topic-grid">
-                    {filteredConcepts.map((concept) => {
-                      const material = materialMap.get(concept.concept_id);
-                      return (
-                        <Card key={concept.concept_id} className="topic-card">
-                          <div className="topic-header">
-                            <div>
-                              <h4>{concept.name}</h4>
-                              <p className="muted">{concept.description || "Concept overview"}</p>
-                            </div>
-                            <Badge variant={material ? "success" : "warning"}>
-                              {material ? "Ready" : "Pending"}
-                            </Badge>
-                          </div>
-                          <div className="topic-actions">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => handleOpenFlashcards(concept)}
+              ) : (
+                <>
+                  <div className="section">
+                    <div className="section-header">
+                      <h4>Subject Pack</h4>
+                    </div>
+                    <div className="inline-actions">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handlePreviewSubjectArtifact("pdf", "Study Material")}
+                      >
+                        View Study PDF
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          handlePreviewSubjectArtifact("quick_revision_pdf", "Quick Revision")
+                        }
+                      >
+                        Quick Revision
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => downloadStudentSubjectArtifact(activeSubjectId!, "zip")}
+                      >
+                        Full Bundle
+                      </Button>
+                    </div>
+                    <p className="muted">A combined version of all topics in one file set.</p>
+                  </div>
+                  <div className="section">
+                    <div className="section-header">
+                      <h4>Start a Custom Quiz</h4>
+                      <Badge variant="info">New</Badge>
+                    </div>
+                    <p className="muted">
+                      Select the topics you want to be tested on. Your quiz is generated uniquely
+                      when you click Start Test.
+                    </p>
+                    {filteredConcepts.length ? (
+                      <div className="topic-list">
+                        {filteredConcepts.map((concept) => {
+                          const isSelected = selectedConceptIds.includes(concept.concept_id);
+                          return (
+                            <div
+                              key={`quiz-${concept.concept_id}`}
+                              className={`topic-item ${isSelected ? "selected" : ""}`}
                             >
-                              Flashcards
-                            </Button>
-                            {material ? (
-                              <>
+                              <span className="topic-ribbon info">Published</span>
+                              <label className="topic-select">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleConceptSelection(concept.concept_id)}
+                                />
+                                <span />
+                              </label>
+                              <div className="topic-content">
+                                <p className="topic-name">{concept.name}</p>
+                                <p className="topic-desc">
+                                  {concept.description || "Concept overview"}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <EmptyState title="No topics" description="No published topics found." />
+                    )}
+                    <div className="inline-actions">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={!selectedConceptIds.length || quizStarting}
+                        onClick={handleStartQuiz}
+                      >
+                        {quizStarting ? "Starting..." : "Start Test"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={!selectedConceptIds.length}
+                        onClick={() => setSelectedConceptIds([])}
+                      >
+                        Clear Selection
+                      </Button>
+                      <span className="muted">
+                        {selectedConceptIds.length} topic(s) selected
+                      </span>
+                    </div>
+                  </div>
+                  <div className="section">
+                    <div className="section-header">
+                      <h4>Topics & Materials</h4>
+                    </div>
+                    <Input
+                      label="Search topics"
+                      placeholder="Search by topic name or description"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                    />
+                    {filteredConcepts.length ? (
+                      <div className="topic-grid">
+                        {filteredConcepts.map((concept) => {
+                          const material = materialMap.get(concept.concept_id);
+                          return (
+                            <Card key={concept.concept_id} className="topic-card">
+                              <div className="topic-header">
+                                <div>
+                                  <h4>{concept.name}</h4>
+                                  <p className="muted">
+                                    {concept.description || "Concept overview"}
+                                  </p>
+                                </div>
+                                <Badge variant={material ? "success" : "warning"}>
+                                  {material ? "Ready" : "Pending"}
+                                </Badge>
+                              </div>
+                              <div className="topic-actions">
                                 <Button
                                   size="sm"
                                   variant="secondary"
-                                  onClick={() =>
-                                    navigate(`/learn/${activeSubjectId!}/${concept.concept_id}`)
-                                  }
+                                  onClick={() => handleOpenFlashcards(concept)}
                                 >
-                                  Open Learning Page
+                                  Flashcards
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant={
-                                    isBookmarked(concept.concept_id) ? "secondary" : "ghost"
-                                  }
-                                  onClick={() => handleToggleBookmark(concept)}
-                                >
-                                  {isBookmarked(concept.concept_id) ? "Bookmarked" : "Bookmark"}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() =>
-                                    handlePreviewConceptArtifact(
-                                      concept,
-                                      "pdf",
-                                      "Study Material"
-                                    )
-                                  }
-                                >
-                                  View Study PDF
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() =>
-                                    handlePreviewConceptArtifact(
-                                      concept,
-                                      "quick_revision_pdf",
-                                      "Quick Revision"
-                                    )
-                                  }
-                                >
-                                  Quick Revision
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleOpenResources(concept)}
-                                >
-                                  Resources
-                                </Button>
-                              </>
-                            ) : (
-                              <span className="muted">Materials not published yet.</span>
-                            )}
-                          </div>
-                        </Card>
-                      );
-                    })}
+                                {material ? (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      onClick={() =>
+                                        navigate(`/learn/${activeSubjectId!}/${concept.concept_id}`)
+                                      }
+                                    >
+                                      Open Learning Page
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant={
+                                        isBookmarked(concept.concept_id) ? "secondary" : "ghost"
+                                      }
+                                      onClick={() => handleToggleBookmark(concept)}
+                                    >
+                                      {isBookmarked(concept.concept_id) ? "Bookmarked" : "Bookmark"}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() =>
+                                        handlePreviewConceptArtifact(
+                                          concept,
+                                          "pdf",
+                                          "Study Material"
+                                        )
+                                      }
+                                    >
+                                      View Study PDF
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() =>
+                                        handlePreviewConceptArtifact(
+                                          concept,
+                                          "quick_revision_pdf",
+                                          "Quick Revision"
+                                        )
+                                      }
+                                    >
+                                      Quick Revision
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleOpenResources(concept)}
+                                    >
+                                      Resources
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <span className="muted">Materials not published yet.</span>
+                                )}
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <EmptyState title="No topics" description="No published topics found." />
+                    )}
                   </div>
-                ) : (
-                  <EmptyState title="No topics" description="No published topics found." />
-                )}
-              </div>
+                </>
+              )}
             </Card>
           )}
         </div>

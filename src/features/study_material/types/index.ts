@@ -13,9 +13,17 @@ export interface SubjectResponse {
   grade_level: string;
   description?: string | null;
   published: boolean;
+  is_enrolled: boolean;
+  enrolled_at?: string | null;
   created_at: string;
   updated_at: string;
   concepts: ConceptResponse[];
+}
+
+export interface SubjectEnrollmentResponse {
+  subject_id: string;
+  student_id: string;
+  enrolled_at: string;
 }
 
 export interface ConceptMaterialResponse {
@@ -172,6 +180,97 @@ export interface ConceptResourcesResponse {
   subject_name: string;
   resources: ResourceItem[];
   approved_video_id?: string | null;
+}
+
+export interface StudentActivityOverviewResponse {
+  total_concepts: number;
+  engaged_concepts: number;
+  progress_percent: number;
+  bookmarks_count: number;
+  total_quiz_sessions: number;
+  completed_quizzes: number;
+  average_quiz_accuracy?: number | null;
+  best_quiz_accuracy?: number | null;
+  learning_sessions: number;
+  learning_messages: number;
+  last_activity_at?: string | null;
+}
+
+export interface AdminEnrolledStudentResponse {
+  student_id: string;
+  student_email: string;
+  enrolled_at: string;
+  overview: StudentActivityOverviewResponse;
+}
+
+export interface AdminStudentConceptActivityResponse {
+  concept_id: string;
+  concept_name: string;
+  status: "not_started" | "active" | "strong" | "needs_support" | string;
+  has_bookmark: boolean;
+  quiz_sessions: number;
+  completed_quizzes: number;
+  best_quiz_accuracy?: number | null;
+  learning_sessions: number;
+  learning_messages: number;
+  last_activity_at?: string | null;
+}
+
+export interface AdminStudentQuizTopicResponse {
+  concept_id: string;
+  concept_name: string;
+  accuracy: number;
+  correct_count: number;
+  total_questions: number;
+  status: string;
+  recommendations: string[];
+}
+
+export interface AdminStudentQuizReportResponse {
+  session_id: string;
+  status: "in_progress" | "completed" | "abandoned";
+  started_at: string;
+  completed_at?: string | null;
+  accuracy?: number | null;
+  correct_count: number;
+  total_questions: number;
+  topics: AdminStudentQuizTopicResponse[];
+  recommendations: string[];
+}
+
+export interface AdminStudentLearningSessionResponse {
+  session_id: string;
+  concept_id: string;
+  concept_name: string;
+  status: "active" | "archived";
+  title?: string | null;
+  prompt_count: number;
+  message_count: number;
+  last_message_at: string;
+}
+
+export interface StudentActivityEventResponse {
+  event_type: string;
+  title: string;
+  description?: string | null;
+  occurred_at: string;
+  concept_id?: string | null;
+  concept_name?: string | null;
+}
+
+export interface AdminStudentActivityResponse {
+  subject_id: string;
+  subject_name: string;
+  grade_level: string;
+  student_id: string;
+  student_email: string;
+  enrolled_at: string;
+  overview: StudentActivityOverviewResponse;
+  concept_activity: AdminStudentConceptActivityResponse[];
+  bookmarks: ConceptBookmarkResponse[];
+  learning_sessions: AdminStudentLearningSessionResponse[];
+  quiz_reports: AdminStudentQuizReportResponse[];
+  recent_activity: StudentActivityEventResponse[];
 }
 
 export interface ArtifactIndex {
