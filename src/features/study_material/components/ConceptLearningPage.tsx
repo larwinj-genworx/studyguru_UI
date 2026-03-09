@@ -8,6 +8,7 @@ import { TextArea } from "@/components/ui/TextArea";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { EmptyState } from "@/components/common/EmptyState";
 import { useAppSelector } from "@/hooks/useAppSelector";
+import { ApprovedConceptImageGallery } from "@/features/study_material/components/ApprovedConceptImageGallery";
 import { LearningBotWidget } from "@/features/study_material/components/LearningBotWidget";
 import {
   addStudentBookmark,
@@ -260,6 +261,13 @@ export const ConceptLearningPage: React.FC = () => {
         </aside>
 
         <main className="learning-content">
+          {role === "student" && subjectId && conceptId ? (
+            <ApprovedConceptImageGallery
+              subjectId={subjectId}
+              conceptId={conceptId}
+              conceptName={content.concept_name}
+            />
+          ) : null}
           {visibleSections.map((section) =>
             renderSection(section, sectionRefs, detailedFocusMap, setDetailedFocusMap)
           )}
