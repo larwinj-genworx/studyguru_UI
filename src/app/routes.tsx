@@ -5,6 +5,7 @@ import { RequireAuth } from "@/features/auth/components/RequireAuth";
 import { LoginPage } from "@/features/auth/components/LoginPage";
 import { SignupPage } from "@/features/auth/components/SignupPage";
 import { AdminDashboard } from "@/features/study_material/components/AdminDashboard";
+import { AdminStudentActivityPage } from "@/features/study_material/components/AdminStudentActivityPage";
 import { StudentDashboard } from "@/features/study_material/components/StudentDashboard";
 import { ConceptLearningPage } from "@/features/study_material/components/ConceptLearningPage";
 import { StudentQuizPage } from "@/features/quiz/components/StudentQuizPage";
@@ -32,6 +33,14 @@ export const AppRoutes: React.FC = () => {
         element={
           <RequireAuth role="admin">
             <AdminDashboard />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/subjects/:subjectId/students/:studentId"
+        element={
+          <RequireAuth role="admin">
+            <AdminStudentActivityPage />
           </RequireAuth>
         }
       />
