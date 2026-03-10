@@ -4,10 +4,12 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { TextArea } from "@/components/ui/TextArea";
 import {
   approveAdminConceptImage,
   fetchAdminConceptImageBlob,
   generateAdminConceptImages,
+  getAdminConceptImages,
   rejectAdminConceptImage
 } from "@/features/study_material/services/studyMaterialService";
 import type {
@@ -33,12 +35,19 @@ export const ConceptImageReviewModal: React.FC<ConceptImageReviewModalProps> = (
   const [collection, setCollection] = useState<ConceptImageCollectionResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{
+    variant: "success" | "info";
+    text: string;
+  } | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
+  const [prompt, setPrompt] = useState("");
   const [preview, setPreview] = useState<{
     title: string;
     url: string;
     caption?: string | null;
+    explanation?: string | null;
+    learningPoints: string[];
   } | null>(null);
 
   useEffect(() => {
@@ -49,17 +58,19 @@ export const ConceptImageReviewModal: React.FC<ConceptImageReviewModalProps> = (
     const load = async () => {
       setLoading(true);
       setError(null);
+      setFeedback(null);
       try {
-        const response = await generateAdminConceptImages(subjectId, conceptId, true);
+        const response = await getAdminConceptImages(subjectId, conceptId);
         if (cancelled) {
           return;
         }
         setCollection(response);
+        setPrompt(response.prompt_text || "");
       } catch (err: any) {
         if (cancelled) {
           return;
         }
-        setError(err?.response?.data?.detail || "Failed to load related concept images.");
+        setError(err?.response?.data?.detail || "Failed to load concept visuals.");
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -134,14 +145,24 @@ export const ConceptImageReviewModal: React.FC<ConceptImageReviewModalProps> = (
     };
   }, [collection]);
 
-  const handleRefresh = async () => {
+  const handleGenerate = async () => {
     setLoading(true);
     setError(null);
+    setFeedback(null);
     try {
-      const response = await generateAdminConceptImages(subjectId, conceptId, true);
+      const response = await generateAdminConceptImages(subjectId, conceptId, {
+        prompt,
+        refresh: true
+      });
       setCollection(response);
+      setFeedback({
+        variant: "info",
+        text: response.images.length
+          ? `Generated ${response.images.length} concept visual(s). Review and approve the best one.`
+          : "Generation completed, but no concept visuals were produced."
+      });
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Failed to refresh concept images.");
+      setError(err?.response?.data?.detail || "Failed to generate concept visuals.");
     } finally {
       setLoading(false);
     }
@@ -150,9 +171,16 @@ export const ConceptImageReviewModal: React.FC<ConceptImageReviewModalProps> = (
   const handleApprove = async (imageId: string) => {
     setActionLoadingId(imageId);
     setError(null);
+    setFeedback(null);
+    const imageTitle =
+      collection?.images.find((item) => item.image_id === imageId)?.title || "Selected image";
     try {
       const response = await approveAdminConceptImage(subjectId, conceptId, imageId);
       setCollection(response);
+      setFeedback({
+        variant: "success",
+        text: `${imageTitle} was approved successfully and is now available in the learning page visuals.`
+      });
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Failed to approve image.");
     } finally {
@@ -163,9 +191,16 @@ export const ConceptImageReviewModal: React.FC<ConceptImageReviewModalProps> = (
   const handleReject = async (imageId: string) => {
     setActionLoadingId(imageId);
     setError(null);
+    setFeedback(null);
+    const imageTitle =
+      collection?.images.find((item) => item.image_id === imageId)?.title || "Selected image";
     try {
       const response = await rejectAdminConceptImage(subjectId, conceptId, imageId);
       setCollection(response);
+      setFeedback({
+        variant: "info",
+        text: `${imageTitle} was marked as rejected.`
+      });
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Failed to reject image.");
     } finally {
@@ -184,7 +219,9 @@ export const ConceptImageReviewModal: React.FC<ConceptImageReviewModalProps> = (
         return {
           title: image.title,
           url,
-          caption: image.caption
+          caption: image.caption,
+          explanation: image.explanation,
+          learningPoints: image.learning_points || []
         };
       });
     } catch (err: any) {
@@ -203,7 +240,7 @@ export const ConceptImageReviewModal: React.FC<ConceptImageReviewModalProps> = (
     <>
       <Modal
         open={open}
-        title={`Concept Images - ${conceptName}`}
+        title={`Concept Visual Studio - ${conceptName}`}
         onClose={onClose}
         className="viewer-modal"
         bodyClassName="viewer-body"
@@ -212,12 +249,34 @@ export const ConceptImageReviewModal: React.FC<ConceptImageReviewModalProps> = (
             <Button variant="ghost" onClick={onClose}>
               Close
             </Button>
-            <Button variant="secondary" onClick={handleRefresh} disabled={loading}>
-              Refresh Suggestions
+            <Button variant="secondary" onClick={handleGenerate} disabled={loading}>
+              {collection?.images.length ? "Regenerate Visuals" : "Generate Visuals"}
             </Button>
           </div>
         }
       >
+        <div className="concept-visual-brief">
+          <div className="concept-visual-brief-copy">
+            <p className="eyebrow">Admin Visual Brief</p>
+            <h4>Guide the renderer toward the most helpful study angle.</h4>
+            <p className="muted">
+              The engine uses concept complexity, learning content, and this admin prompt together.
+            </p>
+          </div>
+          <TextArea
+            label="Focus Prompt"
+            hint="Example: Emphasize the stages clearly and show the order students should remember."
+            rows={4}
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+          />
+          <div className="concept-visual-badges">
+            {collection?.focus_area ? <span>{collection.focus_area}</span> : null}
+            {collection?.complexity_level ? <span>{collection.complexity_level}</span> : null}
+            <span>CPU-friendly local generation</span>
+          </div>
+        </div>
+
         <div className="image-review-head">
           <div className="image-review-stat">
             <span>Approved</span>
@@ -232,6 +291,11 @@ export const ConceptImageReviewModal: React.FC<ConceptImageReviewModalProps> = (
             <strong>{counts.rejected}</strong>
           </div>
         </div>
+        {feedback ? (
+          <div className={`alert ${feedback.variant}`} role="status" aria-live="polite">
+            {feedback.text}
+          </div>
+        ) : null}
         {loading ? (
           <div className="flashcard-loading">
             <LoadingSpinner />
@@ -258,15 +322,23 @@ export const ConceptImageReviewModal: React.FC<ConceptImageReviewModalProps> = (
                     <span className={`badge ${image.status === "approved" ? "success" : image.status === "rejected" ? "danger" : "warning"}`}>
                       {image.status}
                     </span>
-                    <span className="concept-image-score">Score {image.relevance_score.toFixed(2)}</span>
+                    <span className="concept-image-score">Score {image.pedagogical_score.toFixed(2)}</span>
                   </div>
                   <h4>{image.title}</h4>
                   {image.caption ? <p className="muted">{image.caption}</p> : null}
+                  {image.explanation ? <p className="concept-image-note">{image.explanation}</p> : null}
                   <div className="concept-image-meta">
-                    {image.intent_label ? <span>{image.intent_label}</span> : null}
+                    {image.visual_style ? <span>{image.visual_style.replace(/_/g, " ")}</span> : null}
+                    {image.focus_area ? <span>{image.focus_area}</span> : null}
                     {image.width && image.height ? <span>{image.width} x {image.height}</span> : null}
-                    {image.source_domain ? <span>{image.source_domain}</span> : null}
                   </div>
+                  {image.learning_points?.length ? (
+                    <ul className="concept-image-points">
+                      {image.learning_points.slice(0, 3).map((point, index) => (
+                        <li key={`${image.image_id}-point-${index}`}>{point}</li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </div>
                 <div className="inline-actions">
                   <Button
@@ -291,15 +363,15 @@ export const ConceptImageReviewModal: React.FC<ConceptImageReviewModalProps> = (
           </div>
         ) : (
           <EmptyState
-            title="No image suggestions yet"
-            description="Refresh suggestions to search for visual learning images for this concept."
+            title="No concept visuals yet"
+            description="Enter a focus prompt and generate local study visuals for this concept."
           />
         )}
       </Modal>
 
       <Modal
         open={Boolean(preview)}
-        title={preview?.title || "Image Preview"}
+        title={preview?.title || "Visual Preview"}
         onClose={handleClosePreview}
         className="viewer-modal"
         bodyClassName="viewer-body"
@@ -308,6 +380,14 @@ export const ConceptImageReviewModal: React.FC<ConceptImageReviewModalProps> = (
           <div className="concept-image-preview-modal">
             <img src={preview.url} alt={preview.title} />
             {preview.caption ? <p className="muted">{preview.caption}</p> : null}
+            {preview.explanation ? <p className="concept-image-note">{preview.explanation}</p> : null}
+            {preview.learningPoints.length ? (
+              <ul className="concept-image-points">
+                {preview.learningPoints.map((point, index) => (
+                  <li key={`${point}-${index}`}>{point}</li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
       </Modal>

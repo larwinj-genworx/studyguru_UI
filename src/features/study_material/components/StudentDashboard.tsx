@@ -84,6 +84,7 @@ export const StudentDashboard: React.FC = () => {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [selectedConceptIds, setSelectedConceptIds] = useState<string[]>([]);
   const [quizStarting, setQuizStarting] = useState(false);
+  const [quizStartMessage, setQuizStartMessage] = useState<string | null>(null);
   const [enrollingSubjectId, setEnrollingSubjectId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -164,6 +165,7 @@ export const StudentDashboard: React.FC = () => {
     setSearchQuery("");
     setBookmarks([]);
     setSelectedConceptIds([]);
+    setQuizStartMessage(null);
   }, [activeSubjectId]);
 
   const activeSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
@@ -189,6 +191,14 @@ export const StudentDashboard: React.FC = () => {
       (concept.description || "").toLowerCase().includes(term)
     );
   }, [concepts, searchQuery]);
+
+  const selectedQuizConceptNames = useMemo(
+    () =>
+      concepts
+        .filter((concept) => selectedConceptIds.includes(concept.concept_id))
+        .map((concept) => concept.name),
+    [concepts, selectedConceptIds]
+  );
 
   const activeFlashcard = flashcards[flashcardIndex];
 
@@ -392,6 +402,9 @@ export const StudentDashboard: React.FC = () => {
     }
     setQuizStarting(true);
     setError(null);
+    setQuizStartMessage(
+      `Preparing your test for ${selectedConceptIds.length} selected topic(s). You will be taken to the quiz page once the session is ready.`
+    );
     try {
       const response = await startQuizSession({
         subject_id: activeSubjectId,
@@ -399,6 +412,7 @@ export const StudentDashboard: React.FC = () => {
       });
       navigate(`/student/quiz/${response.session.session_id}`);
     } catch (err: any) {
+      setQuizStartMessage(null);
       setError(err?.response?.data?.detail || "Failed to start quiz session.");
     } finally {
       setQuizStarting(false);
@@ -580,6 +594,7 @@ export const StudentDashboard: React.FC = () => {
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
+                                  disabled={quizStarting}
                                   onChange={() => toggleConceptSelection(concept.concept_id)}
                                 />
                                 <span />
@@ -609,7 +624,7 @@ export const StudentDashboard: React.FC = () => {
                       <Button
                         size="sm"
                         variant="ghost"
-                        disabled={!selectedConceptIds.length}
+                        disabled={!selectedConceptIds.length || quizStarting}
                         onClick={() => setSelectedConceptIds([])}
                       >
                         Clear Selection
@@ -618,6 +633,32 @@ export const StudentDashboard: React.FC = () => {
                         {selectedConceptIds.length} topic(s) selected
                       </span>
                     </div>
+                    {quizStarting && quizStartMessage ? (
+                      <div className="quiz-start-banner" aria-live="polite">
+                        <div className="quiz-start-banner-head">
+                          <div className="spinner" aria-hidden="true">
+                            <div />
+                            <div />
+                            <div />
+                          </div>
+                          <div>
+                            <p className="quiz-start-banner-label">Starting Test</p>
+                            <strong>Your quiz session is being prepared.</strong>
+                          </div>
+                        </div>
+                        <p className="muted">{quizStartMessage}</p>
+                        {selectedQuizConceptNames.length ? (
+                          <div className="quiz-start-topics">
+                            {selectedQuizConceptNames.slice(0, 4).map((name) => (
+                              <span key={name}>{name}</span>
+                            ))}
+                            {selectedQuizConceptNames.length > 4 ? (
+                              <span>+{selectedQuizConceptNames.length - 4} more</span>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="section">
                     <div className="section-header">

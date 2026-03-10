@@ -67,8 +67,10 @@ export type LearningBlock =
   | {
       type: "example";
       title?: string;
+      prompt?: string;
       steps?: string[];
       result?: string;
+      example_style?: string;
     };
 
 export interface LearningContent {
@@ -144,14 +146,17 @@ export interface ConceptImageAssetResponse {
   title: string;
   caption?: string | null;
   alt_text?: string | null;
-  intent_label?: string | null;
-  source_page_url?: string | null;
-  source_image_url?: string | null;
-  source_domain?: string | null;
+  prompt_text?: string | null;
+  focus_area?: string | null;
+  complexity_level?: string | null;
+  visual_style?: string | null;
+  generator_name?: string | null;
+  explanation?: string | null;
+  learning_points: string[];
   width?: number | null;
   height?: number | null;
   mime_type?: string | null;
-  relevance_score: number;
+  pedagogical_score: number;
   created_at: string;
   approved_at?: string | null;
 }
@@ -162,6 +167,9 @@ export interface ConceptImageCollectionResponse {
   concept_id: string;
   concept_name: string;
   material_version: number;
+  prompt_text?: string | null;
+  focus_area?: string | null;
+  complexity_level?: string | null;
   images: ConceptImageAssetResponse[];
 }
 
