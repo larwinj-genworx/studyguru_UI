@@ -842,6 +842,18 @@ p {
   color: var(--danger);
 }
 
+.alert.success {
+  background: rgba(47, 125, 92, 0.14);
+  color: var(--success);
+  border: 1px solid rgba(47, 125, 92, 0.2);
+}
+
+.alert.info {
+  background: rgba(43, 108, 176, 0.12);
+  color: var(--info);
+  border: 1px solid rgba(43, 108, 176, 0.18);
+}
+
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -1065,6 +1077,59 @@ p {
 .topic-item.selected {
   border-color: rgba(31, 79, 130, 0.6);
   box-shadow: 0 12px 26px rgba(31, 79, 130, 0.15);
+}
+
+.quiz-start-banner {
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(31, 79, 130, 0.2);
+  background:
+    radial-gradient(circle at top right, rgba(242, 179, 74, 0.18), rgba(242, 179, 74, 0)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(240, 246, 255, 0.96));
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.08);
+}
+
+.quiz-start-banner-head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 0.45rem;
+}
+
+.quiz-start-banner-head .spinner {
+  flex-shrink: 0;
+}
+
+.quiz-start-banner-head strong {
+  color: var(--ink-0);
+}
+
+.quiz-start-banner-label {
+  margin: 0 0 0.2rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.quiz-start-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+}
+
+.quiz-start-topics span {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(31, 79, 130, 0.08);
+  color: var(--primary-strong);
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .topic-content {
@@ -1317,6 +1382,7 @@ p {
   flex-direction: column;
   gap: 1.8rem;
   min-height: 100vh;
+  min-width: 0;
 }
 
 .learning-topbar {
@@ -1349,9 +1415,10 @@ p {
 
 .learning-shell {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: flex-start;
+  min-width: 0;
 }
 
 .learning-nav {
@@ -1363,6 +1430,7 @@ p {
   padding: 1.2rem;
   max-height: calc(100vh - 7rem);
   overflow-y: auto;
+  min-width: 0;
 }
 
 .learning-nav-list {
@@ -1406,10 +1474,14 @@ p {
   flex-direction: column;
   gap: 1.7rem;
   font-size: 1.12rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .learning-section {
   scroll-margin-top: 120px;
+  min-width: 0;
 }
 
 .learning-section h2 {
@@ -1434,6 +1506,8 @@ p {
   border-radius: 16px;
   padding: 1rem 1.1rem;
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .learning-step-head {
@@ -1499,6 +1573,8 @@ p {
   appearance: none;
   font: inherit;
   transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .learning-explain-card:focus-visible {
@@ -1587,6 +1663,22 @@ p {
   color: var(--ink-1);
 }
 
+.learning-topbar h1,
+.learning-section h2,
+.learning-section h3,
+.learning-paragraph,
+.learning-list li,
+.formula-title,
+.formula-expression,
+.example-title,
+.example-prompt,
+.example-step p,
+.callout,
+.learning-nav-item {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .learning-list {
   margin: 0 0 1rem 1.2rem;
   line-height: 1.7;
@@ -1603,6 +1695,8 @@ p {
   border-radius: 14px;
   padding: 1rem 1.2rem;
   margin-bottom: 1rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .formula-expression {
@@ -1638,6 +1732,9 @@ p {
   overflow-x: auto;
   font-family: "Source Sans 3", "Courier New", monospace;
   font-size: 0.95rem;
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .callout {
@@ -1689,11 +1786,42 @@ p {
   border-radius: 14px;
   padding: 1.2rem 1.4rem;
   margin-bottom: 1rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.example-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.45rem;
+}
+
+.example-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(31, 79, 130, 0.12);
+  border: 1px solid rgba(31, 79, 130, 0.2);
+  color: var(--primary-strong);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .example-title {
   font-weight: 600;
-  margin-bottom: 0.6rem;
+  margin: 0;
+}
+
+.example-prompt {
+  margin-bottom: 0.7rem;
+  color: var(--ink-1);
+  font-weight: 500;
 }
 
 .example-steps {
@@ -1705,13 +1833,14 @@ p {
 
 .example-step {
   display: grid;
-  grid-template-columns: 34px 1fr;
+  grid-template-columns: 34px minmax(0, 1fr);
   gap: 0.7rem;
   align-items: start;
   background: rgba(255, 255, 255, 0.72);
   border-radius: 12px;
   padding: 0.7rem 0.8rem;
   border: 1px solid rgba(31, 79, 130, 0.15);
+  min-width: 0;
 }
 
 .example-step-index {
@@ -2144,6 +2273,41 @@ p {
   margin-bottom: 1rem;
 }
 
+.concept-visual-brief {
+  display: grid;
+  gap: 1rem;
+  padding: 1.15rem 1.2rem;
+  border-radius: 22px;
+  border: 1px solid rgba(31, 79, 130, 0.16);
+  background:
+    radial-gradient(circle at top right, rgba(242, 179, 74, 0.2), rgba(242, 179, 74, 0)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(241, 247, 255, 0.96));
+  box-shadow: 0 20px 34px rgba(15, 23, 42, 0.08);
+  margin-bottom: 1rem;
+}
+
+.concept-visual-brief-copy h4 {
+  margin-bottom: 0.3rem;
+}
+
+.concept-visual-badges,
+.learning-image-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.concept-visual-badges span,
+.learning-image-badges span {
+  padding: 0.32rem 0.68rem;
+  border-radius: 999px;
+  background: rgba(31, 79, 130, 0.08);
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
 .image-review-stat {
   background: linear-gradient(135deg, rgba(31, 79, 130, 0.1), rgba(255, 255, 255, 0.96));
   border: 1px solid rgba(31, 79, 130, 0.14);
@@ -2243,6 +2407,12 @@ p {
   font-size: 1.02rem;
 }
 
+.concept-image-note {
+  margin: 0;
+  color: var(--ink-1);
+  line-height: 1.55;
+}
+
 .concept-image-topline {
   display: flex;
   justify-content: space-between;
@@ -2286,6 +2456,19 @@ p {
   border: 1px solid var(--border);
   object-fit: contain;
   background: #fff;
+}
+
+.concept-image-points,
+.learning-image-points {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--ink-1);
+  line-height: 1.55;
+}
+
+.concept-image-points li,
+.learning-image-points li {
+  margin-bottom: 0.24rem;
 }
 
 .learning-image-section {
@@ -2339,6 +2522,9 @@ p {
 
 .learning-image-copy {
   padding: 1rem 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
 }
 
 .learning-image-copy h4 {

@@ -237,6 +237,10 @@ export const getAdminStudentActivity = async (
 ): Promise<AdminStudentActivityResponse> => {
   const response = await api.get(
     `${BASE_PATH}/admin/subjects/${subjectId}/students/${studentId}/activity`
+  );
+  return response.data;
+};
+
 export const getAdminConceptImages = async (
   subjectId: string,
   conceptId: string
@@ -250,12 +254,17 @@ export const getAdminConceptImages = async (
 export const generateAdminConceptImages = async (
   subjectId: string,
   conceptId: string,
-  refresh = false
+  payload: {
+    prompt?: string;
+    refresh?: boolean;
+  } = {}
 ): Promise<ConceptImageCollectionResponse> => {
   const response = await api.post(
     `${BASE_PATH}/admin/subjects/${subjectId}/concepts/${conceptId}/images/generate`,
-    null,
-    { params: { refresh } }
+    {
+      prompt: payload.prompt ?? null,
+      refresh: payload.refresh ?? false
+    }
   );
   return response.data;
 };

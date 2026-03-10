@@ -1358,7 +1358,7 @@ export const AdminDashboard: React.FC = () => {
                                       })
                                     }
                                   >
-                                    Get Related Images
+                                    Open Visual Studio
                                   </Button>
                                   <Button
                                     size="sm"

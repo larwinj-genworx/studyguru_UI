@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 
-import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -28,6 +27,8 @@ export const ApprovedConceptImageGallery: React.FC<ApprovedConceptImageGalleryPr
     title: string;
     url: string;
     caption?: string | null;
+    explanation?: string | null;
+    learningPoints: string[];
   } | null>(null);
 
   useEffect(() => {
@@ -42,7 +43,7 @@ export const ApprovedConceptImageGallery: React.FC<ApprovedConceptImageGalleryPr
         }
       } catch (err: any) {
         if (!cancelled) {
-          setError(err?.response?.data?.detail || "Failed to load concept images.");
+          setError(err?.response?.data?.detail || "Failed to load concept visuals.");
         }
       } finally {
         if (!cancelled) {
@@ -109,7 +110,13 @@ export const ApprovedConceptImageGallery: React.FC<ApprovedConceptImageGalleryPr
         if (prev?.url) {
           URL.revokeObjectURL(prev.url);
         }
-        return { title: image.title, url, caption: image.caption };
+        return {
+          title: image.title,
+          url,
+          caption: image.caption,
+          explanation: image.explanation,
+          learningPoints: image.learning_points || []
+        };
       });
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Failed to open image.");
@@ -151,8 +158,10 @@ export const ApprovedConceptImageGallery: React.FC<ApprovedConceptImageGalleryPr
         <div className="learning-image-head">
           <div>
             <p className="eyebrow">Visual Learning</p>
-            <h2>{conceptName} through diagrams</h2>
-            <p className="muted">Approved visual references selected to support faster understanding.</p>
+            <h2>{conceptName} through study visuals</h2>
+            <p className="muted">
+              Approved concept boards designed to make the idea easier to grasp and revise.
+            </p>
           </div>
         </div>
         <div className="learning-image-grid">
@@ -169,8 +178,19 @@ export const ApprovedConceptImageGallery: React.FC<ApprovedConceptImageGalleryPr
                 <div className="concept-image-placeholder">Image unavailable</div>
               )}
               <div className="learning-image-copy">
+                <div className="learning-image-badges">
+                  {image.visual_style ? <span>{image.visual_style.replace(/_/g, " ")}</span> : null}
+                  {image.complexity_level ? <span>{image.complexity_level}</span> : null}
+                </div>
                 <h4>{image.title}</h4>
-                {image.caption ? <p>{image.caption}</p> : null}
+                {image.explanation ? <p>{image.explanation}</p> : image.caption ? <p>{image.caption}</p> : null}
+                {image.learning_points?.length ? (
+                  <ul className="learning-image-points">
+                    {image.learning_points.slice(0, 2).map((point, index) => (
+                      <li key={`${image.image_id}-point-${index}`}>{point}</li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             </button>
           ))}
@@ -188,6 +208,14 @@ export const ApprovedConceptImageGallery: React.FC<ApprovedConceptImageGalleryPr
           <div className="concept-image-preview-modal">
             <img src={preview.url} alt={preview.title} />
             {preview.caption ? <p className="muted">{preview.caption}</p> : null}
+            {preview.explanation ? <p className="concept-image-note">{preview.explanation}</p> : null}
+            {preview.learningPoints.length ? (
+              <ul className="concept-image-points">
+                {preview.learningPoints.map((point, index) => (
+                  <li key={`${point}-${index}`}>{point}</li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
       </Modal>

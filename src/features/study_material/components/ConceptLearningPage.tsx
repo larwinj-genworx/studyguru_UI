@@ -454,15 +454,16 @@ const normalizeExampleSteps = (steps?: string[]) => {
 
 const hasExampleContent = (section: LearningSection) => {
   const exampleBlock = section.blocks.find((block) => block.type === "example") as
-    | { steps?: string[]; result?: string; title?: string }
+    | { steps?: string[]; result?: string; title?: string; prompt?: string }
     | undefined;
   if (!exampleBlock) {
     return false;
   }
   const steps = normalizeExampleSteps(exampleBlock.steps);
   const title = (exampleBlock.title || "").trim();
+  const prompt = (exampleBlock.prompt || "").trim();
   const result = (exampleBlock.result || "").trim();
-  return Boolean(title || result || steps.length);
+  return Boolean(title || prompt || result || steps.length);
 };
 
 const pruneSections = (sections: LearningSection[]): LearningSection[] => {
@@ -643,6 +644,27 @@ const renderListBlock = (block: { style: "bullet" | "number"; items: string[] })
     </ul>
   );
 
+const formatExampleStyle = (value?: string) => {
+  const cleaned = (value || "").trim().toLowerCase();
+  if (!cleaned) {
+    return "";
+  }
+  if (cleaned === "calculation") {
+    return "Worked Calculation";
+  }
+  if (cleaned === "derivation") {
+    return "Derivation";
+  }
+  if (cleaned === "scenario") {
+    return "Application";
+  }
+  return cleaned
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(" ");
+};
+
 const renderBlock = (block: LearningBlock, context?: BlockRenderContext) => {
   switch (block.type) {
     case "paragraph":
@@ -701,17 +723,25 @@ const renderBlock = (block: LearningBlock, context?: BlockRenderContext) => {
     case "example":
       {
         const steps = normalizeExampleSteps(block.steps);
+        const prompt = (block.prompt || "").trim();
         const resultText = (block.result || "").trim();
+        const exampleStyle = formatExampleStyle(block.example_style);
         const result =
           resultText && !resultText.toLowerCase().startsWith("result")
             ? `Result: ${resultText}`
             : resultText;
-        if (!steps.length && !result && !block.title) {
+        if (!steps.length && !result && !block.title && !prompt) {
           return null;
         }
         return (
           <div className="example-block">
-            {block.title ? <p className="example-title">{block.title}</p> : null}
+            {(block.title || exampleStyle) ? (
+              <div className="example-header">
+                {exampleStyle ? <span className="example-chip">{exampleStyle}</span> : null}
+                {block.title ? <p className="example-title">{block.title}</p> : null}
+              </div>
+            ) : null}
+            {prompt ? <p className="example-prompt">{prompt}</p> : null}
             {steps.length ? (
               <div className="example-steps">
                 {steps.map((step, index) => (
