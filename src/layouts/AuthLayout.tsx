@@ -12,7 +12,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
           <p className="eyebrow brand-eyebrow">StudyGuru</p>
           <h1>Design study materials that feel personal.</h1>
           <p>
-            Curate syllabi, generate rich explanations, and publish to students with a
+            Create syllabi, generate rich explanations, and publish to students with a
             workflow built for clarity.
           </p>
           <div className="hero-highlight">

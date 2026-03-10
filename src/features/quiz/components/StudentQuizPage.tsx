@@ -32,6 +32,8 @@ export const StudentQuizPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const isCompleted = session?.status === "completed";
+  const isTopicAssessment =
+    session?.session_type === "topic_assessment" || report?.session_type === "topic_assessment";
 
   useEffect(() => {
     if (!sessionId) {
@@ -97,10 +99,21 @@ export const StudentQuizPage: React.FC = () => {
   };
 
   return (
-    <DashboardLayout title="Student Quiz" subtitle="Answer carefully and use hints wisely.">
+    <DashboardLayout
+      title={isTopicAssessment ? "Topic Assessment" : "Student Quiz"}
+      subtitle={
+        isTopicAssessment
+          ? "Pass the required score to unlock the next topic."
+          : "Answer carefully and use hints wisely."
+      }
+    >
       <PageHeader
-        title="Custom Quiz Session"
-        subtitle="Questions are generated based on your selected topics and difficulty level."
+        title={isTopicAssessment ? "Topic Assessment Session" : "Custom Quiz Session"}
+        subtitle={
+          isTopicAssessment
+            ? "Hints are available, and the final score uses weighted credit across attempts."
+            : "Questions are generated based on your selected topics and difficulty level."
+        }
       />
 
       {error ? <div className="alert danger">{error}</div> : null}
@@ -119,16 +132,32 @@ export const StudentQuizPage: React.FC = () => {
                 <p className="eyebrow">Final Report</p>
                 <h2>{report.subject_name} Quiz Summary</h2>
                 <p className="muted">
-                  Accuracy: {(report.accuracy * 100).toFixed(1)}% | First-try correct:{" "}
-                  {report.correct_count}/{report.total_questions}
+                  Score: {(report.accuracy * 100).toFixed(1)}%
+                  {report.required_pass_percentage
+                    ? ` | Required: ${report.required_pass_percentage}%`
+                    : ""}
+                  {" | "}Resolved: {report.correct_count}/{report.total_questions}
                 </p>
                 {typeof report.meta?.resolved_questions === "number" ? (
                   <p className="muted">
                     Resolved after retries: {report.meta.resolved_questions}/{report.total_questions}
                   </p>
                 ) : null}
+                {isTopicAssessment && report.meta?.attempt_credit_breakdown ? (
+                  <p className="muted">
+                    First try: {report.meta.attempt_credit_breakdown.first_attempt_correct || 0}
+                    {" | "}Second try: {report.meta.attempt_credit_breakdown.second_attempt_correct || 0}
+                    {" | "}Third+ try: {report.meta.attempt_credit_breakdown.third_plus_attempt_correct || 0}
+                  </p>
+                ) : null}
               </div>
-              <Badge variant="success">Completed</Badge>
+              <Badge variant={report.passed === false ? "warning" : "success"}>
+                {isTopicAssessment
+                  ? report.passed
+                    ? "Passed"
+                    : "Not Yet Passed"
+                  : "Completed"}
+              </Badge>
             </div>
             <div className="quiz-report-grid">
               {report.topic_breakdown.map((topic) => (
@@ -136,7 +165,7 @@ export const StudentQuizPage: React.FC = () => {
                   <div>
                     <p className="quiz-topic-title">{topic.concept_name}</p>
                     <p className="muted">
-                      {Math.round(topic.accuracy * 100)}% first-try accuracy |{" "}
+                      {Math.round(topic.accuracy * 100)}% score |{" "}
                       {topic.correct_count}/{topic.total_questions}
                     </p>
                   </div>
@@ -156,6 +185,12 @@ export const StudentQuizPage: React.FC = () => {
                     <li key={`rec-${index}`}>{item}</li>
                   ))}
                 </ul>
+                {isTopicAssessment && report.passed === false ? (
+                  <p className="muted">
+                    Review the topic and retry the assessment. The next topic stays locked until
+                    you reach the required score.
+                  </p>
+                ) : null}
               </div>
               <div className="inline-actions">
                 <Button variant="secondary" onClick={() => navigate("/student")}>
@@ -170,14 +205,20 @@ export const StudentQuizPage: React.FC = () => {
           <Card className="quiz-header-card">
             <div className="quiz-header-main">
               <div>
-                <p className="eyebrow">Active Assessment</p>
+                <p className="eyebrow">
+                  {isTopicAssessment ? "Topic Assessment" : "Active Assessment"}
+                </p>
                 <h2>{session?.subject_name || "Quiz Session"}</h2>
                 <p className="muted">
-                  {session?.topics?.length || 0} selected topics ·{" "}
-                  {session?.total_questions || 0} questions
+                  {session?.topics?.length || 0} selected topics • {session?.total_questions || 0} questions
                 </p>
               </div>
-              <Badge variant="info">In Progress</Badge>
+              <div className="inline-actions">
+                {isTopicAssessment && session?.required_pass_percentage ? (
+                  <Badge variant="info">Pass {session.required_pass_percentage}%</Badge>
+                ) : null}
+                <Badge variant="info">In Progress</Badge>
+              </div>
             </div>
             <div className="progress quiz-progress">
               <div className="progress-track">
@@ -244,6 +285,12 @@ export const StudentQuizPage: React.FC = () => {
                   <p className="quiz-stat-label">First Attempt Correct</p>
                   <h3>{session?.first_attempt_correct_count || 0}</h3>
                 </div>
+                {isTopicAssessment && session?.required_pass_percentage ? (
+                  <div className="quiz-stat">
+                    <p className="quiz-stat-label">Target Score</p>
+                    <h3>{session.required_pass_percentage}%</h3>
+                  </div>
+                ) : null}
               </div>
               <div className="quiz-topic-list">
                 {session?.topics?.map((topic) => (

@@ -32,6 +32,13 @@ const formatAccuracy = (value?: number | null) => {
   return `${Math.round(value * 100)}%`;
 };
 
+const formatScorePercent = (value?: number | null) => {
+  if (typeof value !== "number") {
+    return "N/A";
+  }
+  return `${Math.round(value)}%`;
+};
+
 const getConceptStatusMeta = (
   status: AdminStudentConceptActivityResponse["status"]
 ) => {
@@ -47,6 +54,23 @@ const getConceptStatusMeta = (
   }
 };
 
+const getProgressStateMeta = (state?: AdminStudentConceptActivityResponse["progress_state"]) => {
+  switch (state) {
+    case "passed":
+      return { label: "Passed", variant: "success" as const };
+    case "retry_required":
+      return { label: "Retry Required", variant: "warning" as const };
+    case "ready_for_assessment":
+      return { label: "Assessment Ready", variant: "info" as const };
+    case "available":
+      return { label: "Learning In Progress", variant: "neutral" as const };
+    case "locked":
+      return { label: "Locked", variant: "neutral" as const };
+    default:
+      return { label: "Pending", variant: "neutral" as const };
+  }
+};
+
 const getQuizStatusMeta = (status: string) => {
   switch (status) {
     case "completed":
@@ -56,6 +80,22 @@ const getQuizStatusMeta = (status: string) => {
     default:
       return { label: "In Progress", variant: "info" as const };
   }
+};
+
+const getQuizTypeMeta = (
+  sessionType: "custom_practice" | "topic_assessment",
+  passed?: boolean | null
+) => {
+  if (sessionType === "topic_assessment") {
+    if (passed === true) {
+      return { label: "Assessment Passed", variant: "success" as const };
+    }
+    if (passed === false) {
+      return { label: "Assessment Retry", variant: "warning" as const };
+    }
+    return { label: "Topic Assessment", variant: "info" as const };
+  }
+  return { label: "Practice Quiz", variant: "neutral" as const };
 };
 
 export const AdminStudentActivityPage: React.FC = () => {
@@ -70,6 +110,7 @@ export const AdminStudentActivityPage: React.FC = () => {
       navigate("/admin");
       return;
     }
+
     const fetchActivity = async () => {
       setLoading(true);
       setError(null);
@@ -82,6 +123,7 @@ export const AdminStudentActivityPage: React.FC = () => {
         setLoading(false);
       }
     };
+
     fetchActivity();
   }, [navigate, studentId, subjectId]);
 
@@ -89,33 +131,13 @@ export const AdminStudentActivityPage: React.FC = () => {
     if (!activity) {
       return [];
     }
-    const rank = (status: string) => {
-      switch (status) {
-        case "needs_support":
-          return 0;
-        case "active":
-          return 1;
-        case "strong":
-          return 2;
-        default:
-          return 3;
-      }
-    };
-    return [...activity.concept_activity].sort((left, right) => {
-      const rankDiff = rank(left.status) - rank(right.status);
-      if (rankDiff !== 0) {
-        return rankDiff;
-      }
-      const leftTime = left.last_activity_at ? new Date(left.last_activity_at).getTime() : 0;
-      const rightTime = right.last_activity_at ? new Date(right.last_activity_at).getTime() : 0;
-      return rightTime - leftTime;
-    });
+    return [...activity.concept_activity].sort((left, right) => left.topic_order - right.topic_order);
   }, [activity]);
 
   return (
     <DashboardLayout
       title="Student Activity"
-      subtitle="Review enrollment progress, learning behaviour, and quiz outcomes."
+      subtitle="Review ordered progression, learning behaviour, and assessment outcomes."
     >
       <PageHeader
         title={activity?.student_email ?? "Student Activity"}
@@ -161,27 +183,34 @@ export const AdminStudentActivityPage: React.FC = () => {
                 </p>
               </div>
               <div className="inline-actions">
-                <Badge variant="info">
-                  {activity.overview.engaged_concepts}/{activity.overview.total_concepts} topics active
-                </Badge>
                 <Badge variant="success">
-                  {activity.overview.progress_percent}% progress
+                  {activity.overview.completed_topics}/{activity.overview.total_concepts} topics passed
+                </Badge>
+                <Badge variant="info">
+                  {activity.overview.current_topic_order
+                    ? `Current Topic ${activity.overview.current_topic_order}`
+                    : "All topics unlocked"}
                 </Badge>
               </div>
             </div>
+
             <div className="analytics-overview-grid">
               <div className="analytics-stat-card">
                 <span>Progress</span>
                 <strong>{activity.overview.progress_percent}%</strong>
-                <p>{activity.overview.engaged_concepts} engaged topics</p>
+                <p>{activity.overview.completed_topics} topics passed</p>
               </div>
               <div className="analytics-stat-card">
-                <span>Completed Tests</span>
-                <strong>{activity.overview.completed_quizzes}</strong>
-                <p>{activity.overview.total_quiz_sessions} total sessions</p>
+                <span>Assessments Passed</span>
+                <strong>{activity.overview.passed_assessments}</strong>
+                <p>
+                  {activity.overview.failed_assessments
+                    ? `${activity.overview.failed_assessments} topic(s) need retry`
+                    : "No retry blockers"}
+                </p>
               </div>
               <div className="analytics-stat-card">
-                <span>Average Accuracy</span>
+                <span>Average Score</span>
                 <strong>{formatAccuracy(activity.overview.average_quiz_accuracy)}</strong>
                 <p>Best {formatAccuracy(activity.overview.best_quiz_accuracy)}</p>
               </div>
@@ -191,9 +220,13 @@ export const AdminStudentActivityPage: React.FC = () => {
                 <p>{activity.overview.learning_messages} bot messages</p>
               </div>
               <div className="analytics-stat-card">
-                <span>Bookmarks</span>
-                <strong>{activity.overview.bookmarks_count}</strong>
-                <p>Saved revision markers</p>
+                <span>Current Topic</span>
+                <strong>
+                  {activity.overview.current_topic_order
+                    ? `Topic ${activity.overview.current_topic_order}`
+                    : "Completed"}
+                </strong>
+                <p>{activity.overview.current_topic_name ?? "No pending topic"}</p>
               </div>
             </div>
           </Card>
@@ -205,7 +238,7 @@ export const AdminStudentActivityPage: React.FC = () => {
                   <div>
                     <h3>Topic Progress</h3>
                     <p className="muted">
-                      Topic-level engagement, quiz confidence, and support signals.
+                      Ordered topic progression, pass requirements, and retry blockers.
                     </p>
                   </div>
                 </div>
@@ -213,6 +246,7 @@ export const AdminStudentActivityPage: React.FC = () => {
                   <div className="analytics-topic-grid">
                     {orderedConceptActivity.map((concept) => {
                       const statusMeta = getConceptStatusMeta(concept.status);
+                      const progressMeta = getProgressStateMeta(concept.progress_state);
                       return (
                         <div
                           key={concept.concept_id}
@@ -220,34 +254,49 @@ export const AdminStudentActivityPage: React.FC = () => {
                         >
                           <div className="analytics-topic-header">
                             <div>
-                              <h4>{concept.concept_name}</h4>
+                              <h4>
+                                Topic {concept.topic_order}: {concept.concept_name}
+                              </h4>
                               <p className="muted">
-                                Last activity {formatDateTime(concept.last_activity_at)}
+                                Pass requirement {concept.pass_percentage}% • Last activity{" "}
+                                {formatDateTime(concept.last_activity_at)}
                               </p>
                             </div>
-                            <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                            <div className="inline-actions">
+                              <Badge variant={progressMeta.variant}>{progressMeta.label}</Badge>
+                              {concept.is_current ? <Badge variant="info">Current</Badge> : null}
+                              <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                            </div>
                           </div>
+
                           <div className="analytics-topic-metrics">
                             <div>
-                              <span>Quiz Sessions</span>
-                              <strong>{concept.quiz_sessions}</strong>
+                              <span>Assessment Attempts</span>
+                              <strong>{concept.assessment_attempts}</strong>
                             </div>
                             <div>
-                              <span>Completed</span>
-                              <strong>{concept.completed_quizzes}</strong>
+                              <span>Latest Score</span>
+                              <strong>{formatScorePercent(concept.latest_score_percent)}</strong>
                             </div>
                             <div>
-                              <span>Best Accuracy</span>
-                              <strong>{formatAccuracy(concept.best_quiz_accuracy)}</strong>
-                            </div>
-                            <div>
-                              <span>Learning Messages</span>
-                              <strong>{concept.learning_messages}</strong>
+                              <span>Best Score</span>
+                              <strong>{formatScorePercent(concept.best_score_percent)}</strong>
                             </div>
                           </div>
+
                           <div className="analytics-topic-footer">
-                            <span>{concept.has_bookmark ? "Bookmarked for revision" : "No bookmark"}</span>
-                            <span>{concept.learning_sessions} bot session(s)</span>
+                            <span>
+                              {concept.passed_at
+                                ? `Passed ${formatDateTime(concept.passed_at)}`
+                                : concept.learning_completed_at
+                                  ? `Learning completed ${formatDateTime(concept.learning_completed_at)}`
+                                  : concept.has_bookmark
+                                    ? "Bookmarked for revision"
+                                    : "No bookmark yet"}
+                            </span>
+                            <span>
+                              {concept.blocker_message || `${concept.learning_sessions} bot session(s)`}
+                            </span>
                           </div>
                         </div>
                       );
@@ -266,7 +315,7 @@ export const AdminStudentActivityPage: React.FC = () => {
                   <div>
                     <h3>Test Reports</h3>
                     <p className="muted">
-                      Every quiz session is shown here with accuracy, topic breakdown, and coaching notes.
+                      Practice quizzes and topic assessments are separated here with scoring context.
                     </p>
                   </div>
                 </div>
@@ -274,37 +323,61 @@ export const AdminStudentActivityPage: React.FC = () => {
                   <div className="analytics-report-list">
                     {activity.quiz_reports.map((report) => {
                       const quizStatus = getQuizStatusMeta(report.status);
+                      const quizType = getQuizTypeMeta(report.session_type, report.passed);
                       return (
                         <div key={report.session_id} className="analytics-report-card">
                           <div className="analytics-report-header">
                             <div>
-                              <h4>Session {report.session_id.slice(0, 8)}</h4>
+                              <h4>
+                                {report.session_type === "topic_assessment"
+                                  ? "Topic Assessment"
+                                  : "Practice Quiz"}{" "}
+                                {report.session_id.slice(0, 8)}
+                              </h4>
                               <p className="muted">
                                 Started {formatDateTime(report.started_at)} • Completed{" "}
                                 {formatDateTime(report.completed_at)}
                               </p>
                             </div>
                             <div className="inline-actions">
+                              <Badge variant={quizType.variant}>{quizType.label}</Badge>
                               <Badge variant={quizStatus.variant}>{quizStatus.label}</Badge>
-                              <Badge variant="info">
-                                {report.correct_count}/{report.total_questions} first try
-                              </Badge>
+                              {report.required_pass_percentage ? (
+                                <Badge variant="info">Pass {report.required_pass_percentage}%</Badge>
+                              ) : null}
                             </div>
                           </div>
+
                           <div className="analytics-report-summary">
                             <div>
-                              <span>Accuracy</span>
-                              <strong>{formatAccuracy(report.accuracy)}</strong>
+                              <span>
+                                {report.session_type === "topic_assessment" ? "Score" : "Accuracy"}
+                              </span>
+                              <strong>
+                                {report.session_type === "topic_assessment"
+                                  ? formatScorePercent(report.score_percent)
+                                  : formatAccuracy(report.accuracy)}
+                              </strong>
+                            </div>
+                            <div>
+                              <span>First Try</span>
+                              <strong>
+                                {report.correct_count}/{report.total_questions}
+                              </strong>
                             </div>
                             <div>
                               <span>Topics Covered</span>
                               <strong>{report.topics.length}</strong>
                             </div>
                           </div>
+
                           {report.topics.length ? (
                             <div className="analytics-report-topics">
                               {report.topics.map((topic) => (
-                                <div key={`${report.session_id}-${topic.concept_id}`} className="analytics-report-topic">
+                                <div
+                                  key={`${report.session_id}-${topic.concept_id}`}
+                                  className="analytics-report-topic"
+                                >
                                   <div>
                                     <p>{topic.concept_name}</p>
                                     <span>
@@ -316,6 +389,7 @@ export const AdminStudentActivityPage: React.FC = () => {
                               ))}
                             </div>
                           ) : null}
+
                           {report.recommendations.length ? (
                             <ul className="analytics-note-list">
                               {report.recommendations.map((item, index) => (

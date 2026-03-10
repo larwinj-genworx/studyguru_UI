@@ -2,6 +2,8 @@
   concept_id: string;
   name: string;
   description?: string | null;
+  topic_order: number;
+  pass_percentage: number;
   created_at: string;
   material_status: "unavailable" | "draft" | "approved" | "published";
   material_version: number;
@@ -24,6 +26,44 @@ export interface SubjectEnrollmentResponse {
   subject_id: string;
   student_id: string;
   enrolled_at: string;
+}
+
+export type StudentTopicProgressState =
+  | "locked"
+  | "available"
+  | "ready_for_assessment"
+  | "retry_required"
+  | "passed";
+
+export interface StudentTopicProgressResponse {
+  concept_id: string;
+  name: string;
+  description?: string | null;
+  topic_order: number;
+  pass_percentage: number;
+  material_status: "unavailable" | "draft" | "approved" | "published";
+  material_version: number;
+  state: StudentTopicProgressState;
+  is_current: boolean;
+  is_locked: boolean;
+  learning_completed_at?: string | null;
+  passed_at?: string | null;
+  latest_score_percent?: number | null;
+  best_score_percent?: number | null;
+  assessment_attempts: number;
+  blocker_message?: string | null;
+}
+
+export interface StudentSubjectProgressResponse {
+  subject_id: string;
+  subject_name: string;
+  grade_level: string;
+  total_topics: number;
+  completed_topics: number;
+  progress_percent: number;
+  current_concept_id?: string | null;
+  current_concept_name?: string | null;
+  topics: StudentTopicProgressResponse[];
 }
 
 export interface ConceptMaterialResponse {
@@ -193,7 +233,12 @@ export interface ConceptResourcesResponse {
 export interface StudentActivityOverviewResponse {
   total_concepts: number;
   engaged_concepts: number;
+  completed_topics: number;
   progress_percent: number;
+  current_topic_name?: string | null;
+  current_topic_order?: number | null;
+  failed_assessments: number;
+  passed_assessments: number;
   bookmarks_count: number;
   total_quiz_sessions: number;
   completed_quizzes: number;
@@ -214,8 +259,18 @@ export interface AdminEnrolledStudentResponse {
 export interface AdminStudentConceptActivityResponse {
   concept_id: string;
   concept_name: string;
+  topic_order: number;
+  pass_percentage: number;
   status: "not_started" | "active" | "strong" | "needs_support" | string;
+  progress_state?: StudentTopicProgressState | null;
+  is_current: boolean;
   has_bookmark: boolean;
+  learning_completed_at?: string | null;
+  assessment_attempts: number;
+  latest_score_percent?: number | null;
+  best_score_percent?: number | null;
+  passed_at?: string | null;
+  blocker_message?: string | null;
   quiz_sessions: number;
   completed_quizzes: number;
   best_quiz_accuracy?: number | null;
@@ -236,12 +291,16 @@ export interface AdminStudentQuizTopicResponse {
 
 export interface AdminStudentQuizReportResponse {
   session_id: string;
+  session_type: "custom_practice" | "topic_assessment";
   status: "in_progress" | "completed" | "abandoned";
   started_at: string;
   completed_at?: string | null;
   accuracy?: number | null;
+  score_percent?: number | null;
   correct_count: number;
   total_questions: number;
+  required_pass_percentage?: number | null;
+  passed?: boolean | null;
   topics: AdminStudentQuizTopicResponse[];
   recommendations: string[];
 }
@@ -327,10 +386,23 @@ export interface AdminMaterialJobCreate {
 export interface ConceptCreate {
   name: string;
   description?: string | null;
+  topic_order: number;
+  pass_percentage: number;
 }
 
 export interface ConceptBulkCreate {
   concepts: ConceptCreate[];
+}
+
+export interface AdminConceptPlanItem {
+  concept_id?: string;
+  name: string;
+  description?: string | null;
+  pass_percentage: number;
+}
+
+export interface AdminConceptPlanUpdateRequest {
+  concepts: AdminConceptPlanItem[];
 }
 
 export interface SubjectCreate {

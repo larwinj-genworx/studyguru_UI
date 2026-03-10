@@ -9,10 +9,16 @@ import { clearAuthState } from "@/utils/storage";
 interface DashboardLayoutProps {
   title: string;
   subtitle?: string;
+  showHeader?: boolean;
   children: React.ReactNode;
 }
 
-export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ title, subtitle, children }) => {
+export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
+  title,
+  subtitle,
+  showHeader = true,
+  children
+}) => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { role, email } = useAppSelector((state) => state.auth);
@@ -44,12 +50,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ title, subtitl
         </button>
       </aside>
       <main className="content">
-        <header className="content-header">
-          <div>
-            <h1>{title}</h1>
-            {subtitle ? <p>{subtitle}</p> : null}
-          </div>
-        </header>
+        {showHeader ? (
+          <header className="content-header">
+            <div>
+              <h1>{title}</h1>
+              {subtitle ? <p>{subtitle}</p> : null}
+            </div>
+          </header>
+        ) : null}
         <section className="content-body">{children}</section>
       </main>
     </div>

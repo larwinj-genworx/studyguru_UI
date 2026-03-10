@@ -1,5 +1,6 @@
 ﻿import { api } from "@/lib/axios";
 import type {
+  AdminConceptPlanUpdateRequest,
   AdminMaterialApproveRequest,
   AdminMaterialJobCreate,
   AdminEnrolledStudentResponse,
@@ -16,6 +17,8 @@ import type {
   LearningContentResponse,
   MaterialJobStatusResponse,
   ResourceItem,
+  StudentSubjectProgressResponse,
+  StudentTopicProgressResponse,
   SubjectEnrollmentResponse,
   SubjectCreate,
   SubjectResponse
@@ -33,6 +36,14 @@ export const addConceptsBulk = async (
   payload: ConceptBulkCreate
 ): Promise<SubjectResponse> => {
   const response = await api.post(`${BASE_PATH}/admin/subjects/${subjectId}/concepts/bulk`, payload);
+  return response.data;
+};
+
+export const saveAdminConceptPlan = async (
+  subjectId: string,
+  payload: AdminConceptPlanUpdateRequest
+): Promise<SubjectResponse> => {
+  const response = await api.put(`${BASE_PATH}/admin/subjects/${subjectId}/concept-plan`, payload);
   return response.data;
 };
 
@@ -132,6 +143,24 @@ export const enrollInSubject = async (
 export const listPublishedConcepts = async (subjectId: string) => {
   const response = await api.get(`${BASE_PATH}/student/subjects/${subjectId}/concepts`);
   return response.data as SubjectResponse["concepts"];
+};
+
+export const getStudentSubjectProgression = async (
+  subjectId: string
+): Promise<StudentSubjectProgressResponse> => {
+  const response = await api.get(`${BASE_PATH}/student/subjects/${subjectId}/progression`);
+  return response.data;
+};
+
+export const markStudentTopicComplete = async (
+  subjectId: string,
+  conceptId: string
+): Promise<StudentTopicProgressResponse> => {
+  const response = await api.post(
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/complete`,
+    {}
+  );
+  return response.data;
 };
 
 export const listPublishedMaterials = async (

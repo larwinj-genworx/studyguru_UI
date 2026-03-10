@@ -20,6 +20,7 @@ import {
   fetchStudentConceptArtifact,
   fetchStudentSubjectArtifact,
   getStudentFlashcards,
+  getStudentSubjectProgression,
   getStudentResources,
   listPublishedConcepts,
   listStudentBookmarks,
@@ -28,13 +29,14 @@ import {
   listPublishedMaterials,
   listPublishedSubjects
 } from "@/features/study_material/services/studyMaterialService";
-import { startQuizSession } from "@/features/quiz/services/quizService";
+import { startQuizSession, startTopicAssessment } from "@/features/quiz/services/quizService";
 import type {
-  ConceptMaterialResponse,
   ConceptBookmarkResponse,
+  ConceptMaterialResponse,
   ConceptResponse,
   FlashcardItem,
   ResourceItem,
+  StudentSubjectProgressResponse,
   SubjectResponse
 } from "@/features/study_material/types";
 
@@ -43,6 +45,7 @@ export const StudentDashboard: React.FC = () => {
   const [activeSubjectId, setActiveSubjectId] = useState<string | null>(null);
   const [concepts, setConcepts] = useState<ConceptResponse[]>([]);
   const [materials, setMaterials] = useState<ConceptMaterialResponse[]>([]);
+  const [progression, setProgression] = useState<StudentSubjectProgressResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -85,6 +88,7 @@ export const StudentDashboard: React.FC = () => {
   const [selectedConceptIds, setSelectedConceptIds] = useState<string[]>([]);
   const [quizStarting, setQuizStarting] = useState(false);
   const [quizStartMessage, setQuizStartMessage] = useState<string | null>(null);
+  const [assessmentStartingConceptId, setAssessmentStartingConceptId] = useState<string | null>(null);
   const [enrollingSubjectId, setEnrollingSubjectId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -113,18 +117,21 @@ export const StudentDashboard: React.FC = () => {
     if (!selectedSubject?.is_enrolled) {
       setConcepts([]);
       setMaterials([]);
+      setProgression(null);
       setLoading(false);
       return;
     }
     const fetchDetails = async () => {
       setLoading(true);
       try {
-        const [conceptsResponse, materialsResponse] = await Promise.all([
+        const [conceptsResponse, materialsResponse, progressionResponse] = await Promise.all([
           listPublishedConcepts(activeSubjectId),
-          listPublishedMaterials(activeSubjectId)
+          listPublishedMaterials(activeSubjectId),
+          getStudentSubjectProgression(activeSubjectId)
         ]);
         setConcepts(conceptsResponse);
         setMaterials(materialsResponse);
+        setProgression(progressionResponse);
       } catch (err: any) {
         setError(err?.response?.data?.detail || "Failed to load materials.");
       } finally {
@@ -166,6 +173,8 @@ export const StudentDashboard: React.FC = () => {
     setBookmarks([]);
     setSelectedConceptIds([]);
     setQuizStartMessage(null);
+    setProgression(null);
+    setAssessmentStartingConceptId(null);
   }, [activeSubjectId]);
 
   const activeSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
@@ -175,29 +184,61 @@ export const StudentDashboard: React.FC = () => {
     materials.forEach((material) => map.set(material.concept_id, material));
     return map;
   }, [materials]);
+  const conceptMap = useMemo(() => {
+    const map = new Map<string, ConceptResponse>();
+    concepts.forEach((concept) => map.set(concept.concept_id, concept));
+    return map;
+  }, [concepts]);
+  const progressTopicMap = useMemo(() => {
+    const map = new Map<string, StudentSubjectProgressResponse["topics"][number]>();
+    (progression?.topics || []).forEach((topic) => map.set(topic.concept_id, topic));
+    return map;
+  }, [progression]);
+  const accessibleConcepts = useMemo(
+    () =>
+      concepts.filter((concept) => {
+        const topic = progressTopicMap.get(concept.concept_id);
+        return topic ? !topic.is_locked : true;
+      }),
+    [concepts, progressTopicMap]
+  );
+  const currentTopic = useMemo(
+    () => progression?.topics.find((topic) => topic.is_current) ?? null,
+    [progression]
+  );
 
   const bookmarkedIds = useMemo(
     () => new Set(bookmarks.map((bookmark) => bookmark.concept_id)),
     [bookmarks]
   );
 
-  const filteredConcepts = useMemo(() => {
+  const filteredProgressTopics = useMemo(() => {
     if (!searchQuery.trim()) {
-      return concepts;
+      return progression?.topics || [];
     }
     const term = searchQuery.toLowerCase();
-    return concepts.filter((concept) =>
+    return (progression?.topics || []).filter((topic) =>
+      topic.name.toLowerCase().includes(term) ||
+      (topic.description || "").toLowerCase().includes(term)
+    );
+  }, [progression, searchQuery]);
+  const filteredPracticeConcepts = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return accessibleConcepts;
+    }
+    const term = searchQuery.toLowerCase();
+    return accessibleConcepts.filter((concept) =>
       concept.name.toLowerCase().includes(term) ||
       (concept.description || "").toLowerCase().includes(term)
     );
-  }, [concepts, searchQuery]);
+  }, [accessibleConcepts, searchQuery]);
 
   const selectedQuizConceptNames = useMemo(
     () =>
-      concepts
+      accessibleConcepts
         .filter((concept) => selectedConceptIds.includes(concept.concept_id))
         .map((concept) => concept.name),
-    [concepts, selectedConceptIds]
+    [accessibleConcepts, selectedConceptIds]
   );
 
   const activeFlashcard = flashcards[flashcardIndex];
@@ -388,6 +429,11 @@ export const StudentDashboard: React.FC = () => {
   };
 
   const toggleConceptSelection = (conceptId: string) => {
+    const topic = progressTopicMap.get(conceptId);
+    if (topic?.is_locked) {
+      setError(topic.blocker_message || "Complete the current topic before selecting this one.");
+      return;
+    }
     setSelectedConceptIds((prev) => {
       if (prev.includes(conceptId)) {
         return prev.filter((id) => id !== conceptId);
@@ -419,6 +465,33 @@ export const StudentDashboard: React.FC = () => {
     }
   };
 
+  const handleStartAssessment = async (conceptId: string) => {
+    if (!activeSubjectId) {
+      return;
+    }
+    setAssessmentStartingConceptId(conceptId);
+    setError(null);
+    try {
+      const response = await startTopicAssessment({
+        subject_id: activeSubjectId,
+        concept_id: conceptId
+      });
+      navigate(`/student/quiz/${response.session.session_id}`);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to start topic assessment.");
+    } finally {
+      setAssessmentStartingConceptId(null);
+    }
+  };
+
+  const openTopicInNewTab = (conceptId: string) => {
+    if (!activeSubjectId) {
+      return;
+    }
+    const topicUrl = new URL(`/learn/${activeSubjectId}/${conceptId}`, window.location.origin);
+    window.open(topicUrl.toString(), "_blank", "noopener,noreferrer");
+  };
+
   const handleEnrollSubject = async () => {
     if (!activeSubject) {
       return;
@@ -445,8 +518,29 @@ export const StudentDashboard: React.FC = () => {
     }
   };
 
+  const getTopicProgressMeta = (
+    state: StudentSubjectProgressResponse["topics"][number]["state"]
+  ) => {
+    switch (state) {
+      case "passed":
+        return { label: "Passed", variant: "success" as const };
+      case "ready_for_assessment":
+        return { label: "Assessment Ready", variant: "info" as const };
+      case "retry_required":
+        return { label: "Retry Required", variant: "warning" as const };
+      case "available":
+        return { label: "Current", variant: "info" as const };
+      default:
+        return { label: "Locked", variant: "neutral" as const };
+    }
+  };
+
   return (
-    <DashboardLayout title="Student Library" subtitle="Explore published study materials.">
+    <DashboardLayout
+      title="Student Library"
+      subtitle="Explore published study materials."
+      showHeader={false}
+    >
       <PageHeader
         title="Your Study Library"
         subtitle="Browse published syllabi, preview materials, open flashcards, and download when needed."
@@ -454,7 +548,7 @@ export const StudentDashboard: React.FC = () => {
       {error ? <div className="alert danger">{error}</div> : null}
 
       <div className="grid two-col">
-        <Card className="panel">
+        <Card className="panel student-subjects-panel">
           <div className="panel-header">
             <h3>Published Syllabi</h3>
           </div>
@@ -503,11 +597,28 @@ export const StudentDashboard: React.FC = () => {
                       : ""}
                   </p>
                 </div>
-                <Badge variant={canAccessActiveSubject ? "success" : "info"}>
-                  {canAccessActiveSubject ? "Enrolled" : "Preview Only"}
-                </Badge>
+                <div className="inline-actions">
+                  {progression ? (
+                    <>
+                      <Badge variant="info">{progression.progress_percent}% Progress</Badge>
+                      <Badge variant="neutral">
+                        {progression.completed_topics}/{progression.total_topics} Passed
+                      </Badge>
+                    </>
+                  ) : null}
+                  <Badge variant={canAccessActiveSubject ? "success" : "info"}>
+                    {canAccessActiveSubject ? "Enrolled" : "Preview Only"}
+                  </Badge>
+                </div>
               </div>
               {activeSubject.description ? <p>{activeSubject.description}</p> : null}
+              {progression ? (
+                <p className="muted">
+                  {currentTopic
+                    ? `Current topic: Topic ${currentTopic.topic_order} - ${currentTopic.name}. Pass ${currentTopic.pass_percentage}% to unlock the next topic.`
+                    : "All published topics are completed."}
+                </p>
+              ) : null}
               {!canAccessActiveSubject ? (
                 <div className="enrollment-preview-card">
                   <div className="enrollment-preview-header">
@@ -573,23 +684,26 @@ export const StudentDashboard: React.FC = () => {
                   </div>
                   <div className="section">
                     <div className="section-header">
-                      <h4>Start a Custom Quiz</h4>
-                      <Badge variant="info">New</Badge>
+                      <h4>Practice Quiz</h4>
+                      <Badge variant="info">Separate Flow</Badge>
                     </div>
                     <p className="muted">
-                      Select the topics you want to be tested on. Your quiz is generated uniquely
-                      when you click Start Test.
+                      Practice quizzes are separate from topic assessments. They help revision, but
+                      they do not unlock the next topic in the learning path.
                     </p>
-                    {filteredConcepts.length ? (
+                    {filteredPracticeConcepts.length ? (
                       <div className="topic-list">
-                        {filteredConcepts.map((concept) => {
+                        {filteredPracticeConcepts.map((concept) => {
                           const isSelected = selectedConceptIds.includes(concept.concept_id);
+                          const topicMeta = progressTopicMap.get(concept.concept_id);
                           return (
                             <div
                               key={`quiz-${concept.concept_id}`}
                               className={`topic-item ${isSelected ? "selected" : ""}`}
                             >
-                              <span className="topic-ribbon info">Published</span>
+                              <span className="topic-ribbon info">
+                                {topicMeta?.state === "passed" ? "Passed" : "Unlocked"}
+                              </span>
                               <label className="topic-select">
                                 <input
                                   type="checkbox"
@@ -600,9 +714,11 @@ export const StudentDashboard: React.FC = () => {
                                 <span />
                               </label>
                               <div className="topic-content">
-                                <p className="topic-name">{concept.name}</p>
+                                <p className="topic-name">
+                                  Topic {concept.topic_order}: {concept.name}
+                                </p>
                                 <p className="topic-desc">
-                                  {concept.description || "Concept overview"}
+                                  {concept.description || "Concept overview"} • Practice only
                                 </p>
                               </div>
                             </div>
@@ -660,61 +776,99 @@ export const StudentDashboard: React.FC = () => {
                       </div>
                     ) : null}
                   </div>
-                  <div className="section">
-                    <div className="section-header">
-                      <h4>Topics & Materials</h4>
-                    </div>
-                    <Input
-                      label="Search topics"
-                      placeholder="Search by topic name or description"
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                    />
-                    {filteredConcepts.length ? (
+                    <div className="section">
+                      <div className="section-header">
+                        <h4>Topics & Materials</h4>
+                      </div>
+                      <Input
+                        label="Search topics"
+                        placeholder="Search by topic name or description"
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                      />
+                    {filteredProgressTopics.length ? (
                       <div className="topic-grid">
-                        {filteredConcepts.map((concept) => {
-                          const material = materialMap.get(concept.concept_id);
+                        {filteredProgressTopics.map((topic) => {
+                          const concept = conceptMap.get(topic.concept_id);
+                          const material = materialMap.get(topic.concept_id);
+                          const progressMeta = getTopicProgressMeta(topic.state);
+                          const bookmarked = isBookmarked(topic.concept_id);
                           return (
-                            <Card key={concept.concept_id} className="topic-card">
+                            <Card key={topic.concept_id} className="topic-card">
+                              {!topic.is_locked && material && concept ? (
+                                <button
+                                  type="button"
+                                  className={`topic-bookmark-toggle ${bookmarked ? "active" : ""}`}
+                                  aria-label={bookmarked ? "Remove bookmark" : "Add bookmark"}
+                                  aria-pressed={bookmarked}
+                                  onClick={() => handleToggleBookmark(concept)}
+                                >
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                    focusable="false"
+                                  >
+                                    <path d="M7 4.75h10a.75.75 0 0 1 .75.75v14.44l-5.3-3.44a.75.75 0 0 0-.82 0L6.25 19.94V5.5A.75.75 0 0 1 7 4.75Z" />
+                                  </svg>
+                                </button>
+                              ) : null}
                               <div className="topic-header">
-                                <div>
-                                  <h4>{concept.name}</h4>
-                                  <p className="muted">
-                                    {concept.description || "Concept overview"}
+                                <div className="topic-heading">
+                                  <h4 className="topic-title">
+                                    Topic {topic.topic_order}: {topic.name}
+                                  </h4>
+                                  <p className="topic-summary">
+                                    {topic.description || concept?.description || "Concept overview"}
                                   </p>
+                                  <div className="topic-meta-row">
+                                    <span>Pass {topic.pass_percentage}%</span>
+                                    {typeof topic.latest_score_percent === "number" ? (
+                                      <span>Latest {topic.latest_score_percent.toFixed(1)}%</span>
+                                    ) : null}
+                                  </div>
                                 </div>
-                                <Badge variant={material ? "success" : "warning"}>
-                                  {material ? "Ready" : "Pending"}
-                                </Badge>
+                                <div className="topic-header-badges">
+                                  <Badge variant={progressMeta.variant}>
+                                    {progressMeta.label}
+                                  </Badge>
+                                </div>
                               </div>
                               <div className="topic-actions">
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() => handleOpenFlashcards(concept)}
-                                >
-                                  Flashcards
-                                </Button>
-                                {material ? (
+                                {topic.is_locked ? (
+                                  <span className="muted">
+                                    {topic.blocker_message || "Complete the current topic first."}
+                                  </span>
+                                ) : material && concept ? (
                                   <>
                                     <Button
                                       size="sm"
                                       variant="secondary"
-                                      onClick={() =>
-                                        navigate(`/learn/${activeSubjectId!}/${concept.concept_id}`)
-                                      }
+                                      onClick={() => openTopicInNewTab(topic.concept_id)}
                                     >
-                                      Open Learning Page
+                                      {topic.state === "available" ? "Open Current Topic" : "Open Topic"}
                                     </Button>
                                     <Button
                                       size="sm"
-                                      variant={
-                                        isBookmarked(concept.concept_id) ? "secondary" : "ghost"
-                                      }
-                                      onClick={() => handleToggleBookmark(concept)}
+                                      variant="secondary"
+                                      onClick={() => handleOpenFlashcards(concept)}
                                     >
-                                      {isBookmarked(concept.concept_id) ? "Bookmarked" : "Bookmark"}
+                                      Flashcards
                                     </Button>
+                                    {topic.state === "ready_for_assessment" ||
+                                    topic.state === "retry_required" ? (
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => handleStartAssessment(topic.concept_id)}
+                                        disabled={assessmentStartingConceptId === topic.concept_id}
+                                      >
+                                        {assessmentStartingConceptId === topic.concept_id
+                                          ? "Starting..."
+                                          : topic.state === "retry_required"
+                                            ? "Retry Assessment"
+                                            : "Start Assessment"}
+                                      </Button>
+                                    ) : null}
                                     <Button
                                       size="sm"
                                       variant="ghost"

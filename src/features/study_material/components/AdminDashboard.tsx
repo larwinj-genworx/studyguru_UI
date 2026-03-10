@@ -15,11 +15,14 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { JobProgress } from "@/features/study_material/components/JobProgress";
 import { ConceptImageReviewModal } from "@/features/study_material/components/ConceptImageReviewModal";
 import {
+  AdminTopicPlanner,
+  type TopicPlannerDraft
+} from "@/features/study_material/components/AdminTopicPlanner";
+import {
   MaterialPreviewModal,
   type PreviewFileType
 } from "@/features/study_material/components/MaterialPreviewModal";
 import {
-  addConceptsBulk,
   approveJob,
   createAdminJob,
   createSubject,
@@ -38,13 +41,14 @@ import {
   discardJobConcept,
   publishSubject,
   publishSelectedConcepts,
+  saveAdminConceptPlan,
   unpublishSubject
 } from "@/features/study_material/services/studyMaterialService";
 import type {
   AdminEnrolledStudentResponse,
+  AdminConceptPlanUpdateRequest,
   AdminMaterialJobCreate,
   AdminMaterialPublishRequest,
-  ConceptBulkCreate,
   ConceptMaterialResponse,
   ConceptResourcesResponse,
   MaterialJobStatusResponse,
@@ -53,13 +57,41 @@ import type {
   SubjectResponse
 } from "@/features/study_material/types";
 
-
-interface ConceptDraft {
-  name: string;
-  description: string;
+interface PendingReviewGroup {
+  job: MaterialJobStatusResponse;
+  items: Array<{
+    conceptId: string;
+    conceptName: string;
+    artifacts: ConceptMaterialResponse["artifact_index"];
+  }>;
 }
 
-const emptyConcept: ConceptDraft = { name: "", description: "" };
+const createTopicPlannerDraft = (
+  partial: Partial<TopicPlannerDraft> = {}
+): TopicPlannerDraft => ({
+  client_id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  name: "",
+  description: "",
+  pass_percentage: 70,
+  is_existing: false,
+  ...partial
+});
+
+const mapConceptToPlannerDraft = (
+  concept: SubjectResponse["concepts"][number]
+): TopicPlannerDraft =>
+  createTopicPlannerDraft({
+    client_id: `concept-${concept.concept_id}`,
+    concept_id: concept.concept_id,
+    name: concept.name,
+    description: concept.description || "",
+    pass_percentage: concept.pass_percentage,
+    is_existing: true
+  });
+
+const isPendingReviewGroup = (
+  value: PendingReviewGroup | null
+): value is PendingReviewGroup => value !== null;
 
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -72,7 +104,9 @@ export const AdminDashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showSubjectModal, setShowSubjectModal] = useState(false);
   const [showConceptModal, setShowConceptModal] = useState(false);
-  const [conceptDrafts, setConceptDrafts] = useState<ConceptDraft[]>([{ ...emptyConcept }]);
+  const [conceptDrafts, setConceptDrafts] = useState<TopicPlannerDraft[]>([
+    createTopicPlannerDraft()
+  ]);
   const [subjectForm, setSubjectForm] = useState<SubjectCreate>({
     name: "",
     grade_level: "",
@@ -123,6 +157,17 @@ export const AdminDashboard: React.FC = () => {
   const activeSubject = activeSubjectId
     ? subjects.find((subject) => subject.subject_id === activeSubjectId)
     : undefined;
+  const buildConceptPlannerDrafts = useCallback(
+    (subject?: SubjectResponse) => {
+      if (!subject?.concepts.length) {
+        return [createTopicPlannerDraft()];
+      }
+      return [...subject.concepts]
+        .sort((left, right) => left.topic_order - right.topic_order)
+        .map(mapConceptToPlannerDraft);
+    },
+    []
+  );
   const activeJob = activeSubjectId ? jobMap[subjectJobs[activeSubjectId]] : undefined;
   const activeJobId = activeJob?.job_id;
   const activeJobStatus = activeJob?.status;
@@ -283,18 +328,11 @@ export const AdminDashboard: React.FC = () => {
           items
         };
       })
-      .filter(Boolean)
+      .filter(isPendingReviewGroup)
       .sort(
         (a, b) =>
           new Date(b.job.created_at).getTime() - new Date(a.job.created_at).getTime()
-      ) as Array<{
-      job: MaterialJobStatusResponse;
-      items: Array<{
-        conceptId: string;
-        conceptName: string;
-        artifacts: ConceptMaterialResponse["artifact_index"];
-      }>;
-    }>;
+      );
   }, [activeSubjectId, activeMaterials, jobMap, conceptNameMap]);
 
   const filteredSubjects = useMemo(() => {
@@ -474,6 +512,16 @@ export const AdminDashboard: React.FC = () => {
     jobStatusRef.current = currentStatus;
   }, [activeJobId, activeJobStatus, activeSubjectId, refreshSubjectData]);
 
+  const handleOpenTopicPlanner = () => {
+    setConceptDrafts(buildConceptPlannerDrafts(activeSubject));
+    setShowConceptModal(true);
+  };
+
+  const handleCloseTopicPlanner = () => {
+    setShowConceptModal(false);
+    setConceptDrafts(buildConceptPlannerDrafts(activeSubject));
+  };
+
   const handleCreateSubject = async () => {
     setLoading(true);
     setError(null);
@@ -482,6 +530,7 @@ export const AdminDashboard: React.FC = () => {
       setSubjects((prev) => [response, ...prev]);
       setActiveSubjectId(response.subject_id);
       setShowSubjectModal(false);
+      setConceptDrafts([createTopicPlannerDraft()]);
       setSubjectForm({ name: "", grade_level: "", description: "" });
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Failed to create syllabus.");
@@ -490,35 +539,61 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleAddConcepts = async () => {
+  const handleSaveConceptPlan = async () => {
     if (!activeSubjectId) {
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const payload: ConceptBulkCreate = {
-        concepts: conceptDrafts
-          .filter((draft) => draft.name.trim())
+      const normalizedDrafts = conceptDrafts.filter(
+        (draft) =>
+          draft.is_existing ||
+          draft.name.trim() ||
+          draft.description.trim() ||
+          Number(draft.pass_percentage) !== 70
+      );
+      if (
+        normalizedDrafts.some(
+          (draft) => !draft.name.trim()
+        )
+      ) {
+        setError("Each topic card needs a topic name before saving the topic plan.");
+        return;
+      }
+      const payload: AdminConceptPlanUpdateRequest = {
+        concepts: normalizedDrafts
           .map((draft) => ({
+            concept_id: draft.concept_id,
             name: draft.name.trim(),
-            description: draft.description.trim() || undefined
+            description: draft.description.trim() || undefined,
+            pass_percentage: Number(draft.pass_percentage)
           }))
       };
       if (!payload.concepts.length) {
         setError("Add at least one topic.");
         return;
       }
-      const response = await addConceptsBulk(activeSubjectId, payload);
+      const invalidProgress = payload.concepts.some(
+        (concept) =>
+          !Number.isFinite(concept.pass_percentage) ||
+          concept.pass_percentage < 1 ||
+          concept.pass_percentage > 100
+      );
+      if (invalidProgress) {
+        setError("Each topic needs a valid pass percentage.");
+        return;
+      }
+      const response = await saveAdminConceptPlan(activeSubjectId, payload);
       setSubjects((prev) =>
         prev.map((subject) =>
           subject.subject_id === activeSubjectId ? response : subject
         )
       );
       setShowConceptModal(false);
-      setConceptDrafts([{ ...emptyConcept }]);
+      setConceptDrafts(buildConceptPlannerDrafts(response));
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Failed to add topics.");
+      setError(err?.response?.data?.detail || "Failed to save topic plan.");
     } finally {
       setLoading(false);
     }
@@ -1194,17 +1269,12 @@ export const AdminDashboard: React.FC = () => {
     <DashboardLayout
       title="Study Material Control"
       subtitle="Create syllabi, generate materials, and publish to students."
+      showHeader={false}
     >
       <PageHeader
         title="Syllabus Workspace"
         subtitle="Manage each syllabus end-to-end with AI-powered generation."
-        actions={
-          <Button onClick={() => setShowSubjectModal(true)}>
-            Add Syllabus
-          </Button>
-        }
       />
-
       {error ? <div className="alert danger">{error}</div> : null}
 
       <Card className="panel admin-subjects-panel">
@@ -1252,21 +1322,31 @@ export const AdminDashboard: React.FC = () => {
             {activeSubject.description ? <p>{activeSubject.description}</p> : null}
             <div className="section">
               <div className="section-header">
-                <div>
-                  <h4>Topics</h4>
-                  <p className="muted">
-                    Selected {selectedConceptIds.size} of {activeSubject.concepts.length}
-                  </p>
-                </div>
-                <div className="inline-actions">
+                <h3>Topics</h3>
+                <div className="inline-actions section-header-actions">
                   <Button variant="ghost" size="sm" onClick={handleSelectAllConcepts}>
                     {selectedConceptIds.size ? "Unselect All" : "Select All"}
                   </Button>
-                  <Button variant="secondary" onClick={() => setShowConceptModal(true)}>
-                    Add Topics
+                  <Button
+                    variant="secondary"
+                    onClick={handleOpenTopicPlanner}
+                  >
+                    {activeSubject.concepts.length ? "Manage Topics" : "Add Topics"}
                   </Button>
                 </div>
               </div>
+              {activeSubject.published ? (
+                <p className="muted">
+                  Published topics stay locked. Use Manage Topics to append new topics without
+                  disturbing the live sequence.
+                </p>
+              ) : null}
+              {hasRunningJobs ? (
+                <p className="muted">
+                  A material generation job is running. You can review the topic plan, but save it
+                  after the run completes.
+                </p>
+              ) : null}
               {activeSubject.concepts.length ? (
                 <div className="topic-list">
                   {activeSubject.concepts.map((concept) => (
@@ -1294,9 +1374,12 @@ export const AdminDashboard: React.FC = () => {
                         <span aria-hidden="true" />
                       </label>
                       <div className="topic-content">
-                        <p className="topic-name">{concept.name}</p>
+                        <p className="topic-name">
+                          Topic {concept.topic_order}: {concept.name}
+                        </p>
                         <p className="topic-desc">
                           {concept.description || "No topic description provided."}
+                          {` • Pass ${concept.pass_percentage}%`}
                         </p>
                       </div>
                     </div>
@@ -1358,7 +1441,7 @@ export const AdminDashboard: React.FC = () => {
                                       })
                                     }
                                   >
-                                    Open Visual Studio
+                                    Generate Learning Thumbnail
                                   </Button>
                                   <Button
                                     size="sm"
@@ -1551,14 +1634,18 @@ export const AdminDashboard: React.FC = () => {
                         <strong>{student.overview.progress_percent}%</strong>
                       </div>
                       <div className="student-roster-metric">
-                        <span>Topics</span>
+                        <span>Passed Topics</span>
                         <strong>
-                          {student.overview.engaged_concepts}/{student.overview.total_concepts}
+                          {student.overview.completed_topics}/{student.overview.total_concepts}
                         </strong>
                       </div>
                       <div className="student-roster-metric">
-                        <span>Tests</span>
-                        <strong>{student.overview.completed_quizzes}</strong>
+                        <span>Current Topic</span>
+                        <strong>
+                          {student.overview.current_topic_order
+                            ? `Topic ${student.overview.current_topic_order}`
+                            : "Completed"}
+                        </strong>
                       </div>
                       <div className="student-roster-metric">
                         <span>Avg Accuracy</span>
@@ -1566,9 +1653,18 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                     </div>
                     <div className="student-roster-footer">
-                      <p className="muted">
-                        Last activity {formatStudentMetricDate(student.overview.last_activity_at)}
-                      </p>
+                      <div>
+                        <p className="muted">
+                          {student.overview.current_topic_name
+                            ? `Working on ${student.overview.current_topic_name}`
+                            : "All ordered topics are cleared."}
+                        </p>
+                        <p className="muted">
+                          {student.overview.failed_assessments
+                            ? `${student.overview.failed_assessments} topic(s) need assessment retry`
+                            : `Last activity ${formatStudentMetricDate(student.overview.last_activity_at)}`}
+                        </p>
+                      </div>
                       <Button
                         size="sm"
                         variant="secondary"
@@ -1641,64 +1737,36 @@ export const AdminDashboard: React.FC = () => {
 
       <Modal
         open={showConceptModal}
-        title="Add Topics"
-        onClose={() => setShowConceptModal(false)}
+        title="Manage Topic Plan"
+        onClose={handleCloseTopicPlanner}
+        className="topic-planner-modal"
+        bodyClassName="topic-planner-modal-body"
         footer={
           <div className="inline-actions">
-            <Button variant="ghost" onClick={() => setShowConceptModal(false)}>
+            <Button variant="ghost" onClick={handleCloseTopicPlanner}>
               Cancel
             </Button>
-            <Button onClick={handleAddConcepts} disabled={loading}>
-              {loading ? "Saving..." : "Add Topics"}
+            <Button onClick={handleSaveConceptPlan} disabled={loading || hasRunningJobs}>
+              {loading ? "Saving..." : "Save Topic Plan"}
             </Button>
           </div>
         }
       >
-        <div className="stack">
-          {conceptDrafts.map((draft, index) => (
-            <Card key={index} className="subtle">
-              <div className="form-stack">
-                <Input
-                  label={`Topic ${index + 1}`}
-                  value={draft.name}
-                  onChange={(event) => {
-                    const updated = [...conceptDrafts];
-                    updated[index] = { ...draft, name: event.target.value };
-                    setConceptDrafts(updated);
-                  }}
-                  required
-                />
-                <TextArea
-                  label="Description"
-                  value={draft.description}
-                  onChange={(event) => {
-                    const updated = [...conceptDrafts];
-                    updated[index] = { ...draft, description: event.target.value };
-                    setConceptDrafts(updated);
-                  }}
-                  rows={2}
-                />
-                {conceptDrafts.length > 1 ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setConceptDrafts((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
-                    }
-                  >
-                    Remove
-                  </Button>
-                ) : null}
-              </div>
-            </Card>
-          ))}
-          <Button
-            variant="secondary"
-            onClick={() => setConceptDrafts((prev) => [...prev, { ...emptyConcept }])}
-          >
-            Add Another Topic
-          </Button>
-        </div>
+        <AdminTopicPlanner
+          items={conceptDrafts}
+          disabled={loading || hasRunningJobs}
+          publishedMode={Boolean(activeSubject?.published)}
+          onChange={setConceptDrafts}
+          onAddTopic={() =>
+            setConceptDrafts((prev) => [...prev, createTopicPlannerDraft()])
+          }
+          onRemoveTopic={(clientId) =>
+            setConceptDrafts((prev) => {
+              const next = prev.filter((item) => item.client_id !== clientId);
+              return next.length ? next : [createTopicPlannerDraft()];
+            })
+          }
+        />
       </Modal>
 
       <MaterialPreviewModal
