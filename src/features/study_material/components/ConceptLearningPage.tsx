@@ -14,15 +14,19 @@ import {
   addStudentBookmark,
   getAdminLearningContent,
   getStudentLearningContent,
+  getStudentSubjectProgression,
   listStudentBookmarks,
+  markStudentTopicComplete,
   removeStudentBookmark,
   updateAdminLearningContent
 } from "@/features/study_material/services/studyMaterialService";
+import { startTopicAssessment } from "@/features/quiz/services/quizService";
 import type {
   ConceptBookmarkResponse,
   LearningBlock,
   LearningContentResponse,
-  LearningSection
+  LearningSection,
+  StudentTopicProgressResponse
 } from "@/features/study_material/types";
 
 export const ConceptLearningPage: React.FC = () => {
@@ -40,6 +44,8 @@ export const ConceptLearningPage: React.FC = () => {
   const [editError, setEditError] = useState<string | null>(null);
   const [bookmarks, setBookmarks] = useState<ConceptBookmarkResponse[]>([]);
   const [detailedFocusMap, setDetailedFocusMap] = useState<Record<string, number>>({});
+  const [topicProgress, setTopicProgress] = useState<StudentTopicProgressResponse | null>(null);
+  const [progressActionLoading, setProgressActionLoading] = useState(false);
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
@@ -76,6 +82,19 @@ export const ConceptLearningPage: React.FC = () => {
     listStudentBookmarks(subjectId)
       .then((items) => setBookmarks(items))
       .catch(() => setBookmarks([]));
+  }, [role, subjectId, conceptId]);
+
+  useEffect(() => {
+    if (role !== "student" || !subjectId || !conceptId) {
+      setTopicProgress(null);
+      return;
+    }
+    getStudentSubjectProgression(subjectId)
+      .then((response) => {
+        const currentTopic = response.topics.find((topic) => topic.concept_id === conceptId) || null;
+        setTopicProgress(currentTopic);
+      })
+      .catch(() => setTopicProgress(null));
   }, [role, subjectId, conceptId]);
 
   useEffect(() => {
@@ -126,6 +145,22 @@ export const ConceptLearningPage: React.FC = () => {
     () => bookmarks.some((item) => item.concept_id === conceptId),
     [bookmarks, conceptId]
   );
+  const topicProgressMeta = useMemo(() => {
+    switch (topicProgress?.state) {
+      case "passed":
+        return { label: "Passed", variant: "success" as const };
+      case "ready_for_assessment":
+        return { label: "Assessment Ready", variant: "info" as const };
+      case "retry_required":
+        return { label: "Retry Required", variant: "warning" as const };
+      case "available":
+        return { label: "Current Topic", variant: "info" as const };
+      case "locked":
+        return { label: "Locked", variant: "neutral" as const };
+      default:
+        return null;
+    }
+  }, [topicProgress]);
 
   const handleScrollTo = (id: string) => {
     const element = sectionRefs.current[id];
@@ -157,6 +192,41 @@ export const ConceptLearningPage: React.FC = () => {
       }
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Failed to update bookmark.");
+    }
+  };
+
+  const handleMarkTopicComplete = async () => {
+    if (!subjectId || !conceptId) {
+      return;
+    }
+    setProgressActionLoading(true);
+    setError(null);
+    try {
+      const response = await markStudentTopicComplete(subjectId, conceptId);
+      setTopicProgress(response);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to mark this topic as completed.");
+    } finally {
+      setProgressActionLoading(false);
+    }
+  };
+
+  const handleStartAssessment = async () => {
+    if (!subjectId || !conceptId) {
+      return;
+    }
+    setProgressActionLoading(true);
+    setError(null);
+    try {
+      const response = await startTopicAssessment({
+        subject_id: subjectId,
+        concept_id: conceptId
+      });
+      navigate(`/student/quiz/${response.session.session_id}`);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to start the topic assessment.");
+    } finally {
+      setProgressActionLoading(false);
     }
   };
 
@@ -217,9 +287,43 @@ export const ConceptLearningPage: React.FC = () => {
           <Badge variant={content.lifecycle_status === "published" ? "success" : "warning"}>
             {content.lifecycle_status}
           </Badge>
+          {role === "student" && topicProgressMeta ? (
+            <Badge variant={topicProgressMeta.variant}>{topicProgressMeta.label}</Badge>
+          ) : null}
+          {role === "student" && topicProgress ? (
+            <Badge variant="info">
+              Topic {topicProgress.topic_order} • Pass {topicProgress.pass_percentage}%
+            </Badge>
+          ) : null}
           {quickRevisionItems.length ? (
             <Button variant="secondary" size="sm" onClick={() => setQuickOpen(true)}>
               Quick Revision
+            </Button>
+          ) : null}
+          {role === "student" && topicProgress?.state === "available" ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleMarkTopicComplete}
+              disabled={progressActionLoading}
+            >
+              {progressActionLoading ? "Saving..." : "Mark Topic Complete"}
+            </Button>
+          ) : null}
+          {role === "student" &&
+          (topicProgress?.state === "ready_for_assessment" ||
+            topicProgress?.state === "retry_required") ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleStartAssessment}
+              disabled={progressActionLoading}
+            >
+              {progressActionLoading
+                ? "Starting..."
+                : topicProgress.state === "retry_required"
+                  ? "Retry Assessment"
+                  : "Start Assessment"}
             </Button>
           ) : null}
           {role === "student" ? (
@@ -261,6 +365,19 @@ export const ConceptLearningPage: React.FC = () => {
         </aside>
 
         <main className="learning-content">
+          {role === "student" && topicProgress ? (
+            <div className={`alert ${topicProgress.is_locked ? "danger" : "info"}`}>
+              {topicProgress.is_locked
+                ? topicProgress.blocker_message
+                : topicProgress.state === "available"
+                  ? "Finish this topic, then mark it complete to unlock the assessment."
+                  : topicProgress.state === "ready_for_assessment"
+                    ? `Assessment is ready. You need ${topicProgress.pass_percentage}% to unlock the next topic.`
+                    : topicProgress.state === "retry_required"
+                      ? `Your latest score was ${topicProgress.latest_score_percent?.toFixed(1) || "0"}%. Review the topic and retry the assessment to unlock the next topic.`
+                      : "This topic is passed. You can review it anytime."}
+            </div>
+          ) : null}
           {role === "student" && subjectId && conceptId ? (
             <ApprovedConceptImageGallery
               subjectId={subjectId}

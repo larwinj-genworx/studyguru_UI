@@ -3,6 +3,11 @@ export interface QuizSessionStartRequest {
   concept_ids: string[];
 }
 
+export interface TopicAssessmentStartRequest {
+  subject_id: string;
+  concept_id: string;
+}
+
 export interface QuizTopicSummary {
   concept_id: string;
   concept_name: string;
@@ -15,12 +20,15 @@ export interface QuizSessionResponse {
   session_id: string;
   subject_id: string;
   subject_name: string;
+  session_type: "custom_practice" | "topic_assessment";
   status: "in_progress" | "completed" | "abandoned";
   total_questions: number;
   current_index: number;
   correct_count: number;
   incorrect_count: number;
   first_attempt_correct_count: number;
+  required_pass_percentage?: number | null;
+  passed?: boolean | null;
   started_at: string;
   completed_at?: string | null;
   topics: QuizTopicSummary[];
@@ -61,9 +69,12 @@ export interface QuizReportResponse {
   session_id: string;
   subject_id: string;
   subject_name: string;
+  session_type: "custom_practice" | "topic_assessment";
   total_questions: number;
   correct_count: number;
   accuracy: number;
+  required_pass_percentage?: number | null;
+  passed?: boolean | null;
   completed_at: string;
   topic_breakdown: QuizTopicPerformance[];
   recommendations: string[];

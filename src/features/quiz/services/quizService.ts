@@ -4,7 +4,8 @@ import type {
   QuizAnswerResponse,
   QuizReportResponse,
   QuizSessionStartRequest,
-  QuizSessionStartResponse
+  QuizSessionStartResponse,
+  TopicAssessmentStartRequest
 } from "@/features/quiz/types";
 
 const BASE_PATH = "/v1/quizzes";
@@ -13,6 +14,13 @@ export const startQuizSession = async (
   payload: QuizSessionStartRequest
 ): Promise<QuizSessionStartResponse> => {
   const response = await api.post(`${BASE_PATH}/student/sessions`, payload);
+  return response.data;
+};
+
+export const startTopicAssessment = async (
+  payload: TopicAssessmentStartRequest
+): Promise<QuizSessionStartResponse> => {
+  const response = await api.post(`${BASE_PATH}/student/assessments`, payload);
   return response.data;
 };
 
