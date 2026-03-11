@@ -29,6 +29,10 @@ import {
   listPublishedMaterials,
   listPublishedSubjects
 } from "@/features/study_material/services/studyMaterialService";
+import {
+  formatFlashcardKindLabel,
+  splitFlashcardAnswer
+} from "@/features/study_material/utils/flashcards";
 import { startQuizSession, startTopicAssessment } from "@/features/quiz/services/quizService";
 import type {
   ConceptBookmarkResponse,
@@ -242,6 +246,9 @@ export const StudentDashboard: React.FC = () => {
   );
 
   const activeFlashcard = flashcards[flashcardIndex];
+  const activeFlashcardAnswerPoints = activeFlashcard
+    ? splitFlashcardAnswer(activeFlashcard.answer)
+    : [];
 
   const isBookmarked = (conceptId: string) => bookmarkedIds.has(conceptId);
 
@@ -980,20 +987,47 @@ export const StudentDashboard: React.FC = () => {
           <div className="alert danger">{flashcardError}</div>
         ) : flashcards.length ? (
           <div className="flashcard-stage">
-            <div className="flashcard-count">
-              Card {flashcardIndex + 1} of {flashcards.length}
+            <div className="flashcard-stage-header">
+              <div className="flashcard-count">
+                Card {flashcardIndex + 1} of {flashcards.length}
+              </div>
+              {activeFlashcard?.kind ? (
+                <span className={`flashcard-kind ${activeFlashcard.kind}`}>
+                  {formatFlashcardKindLabel(activeFlashcard.kind)}
+                </span>
+              ) : null}
             </div>
             <button
+              type="button"
               className={`flashcard ${flashcardFlipped ? "flipped" : ""}`}
               onClick={() => setFlashcardFlipped((prev) => !prev)}
+              aria-label={
+                flashcardFlipped
+                  ? "Show the flashcard recall cue"
+                  : "Reveal the flashcard answer"
+              }
             >
               <div className="flashcard-face front">
-                <p>{activeFlashcard?.question}</p>
-                <span className="flashcard-hint">Tap to reveal answer</span>
+                {activeFlashcard?.kind ? (
+                  <span className="flashcard-kicker">
+                    {formatFlashcardKindLabel(activeFlashcard.kind)}
+                  </span>
+                ) : null}
+                <h4 className="flashcard-title">{activeFlashcard?.question}</h4>
+                <span className="flashcard-hint">Tap to reveal the answer</span>
               </div>
               <div className="flashcard-face back">
-                <p>{activeFlashcard?.answer}</p>
-                <span className="flashcard-hint">Tap to return to question</span>
+                <span className="flashcard-kicker">Answer</span>
+                {activeFlashcardAnswerPoints.length > 1 ? (
+                  <ul className="flashcard-answer-list">
+                    {activeFlashcardAnswerPoints.map((point, index) => (
+                      <li key={`${point}-${index}`}>{point}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="flashcard-answer">{activeFlashcard?.answer}</p>
+                )}
+                <span className="flashcard-hint">Tap to return to the heading</span>
               </div>
             </button>
           </div>
