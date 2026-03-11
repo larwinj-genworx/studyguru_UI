@@ -372,9 +372,21 @@ export interface MaterialJobStatusResponse {
   updated_at: string;
 }
 
+export type FlashcardKind =
+  | "core"
+  | "intuition"
+  | "step"
+  | "formula"
+  | "pitfall"
+  | "summary"
+  | "practice"
+  | "concept";
+
 export interface FlashcardItem {
   question: string;
   answer: string;
+  hint?: string | null;
+  kind?: FlashcardKind | null;
 }
 
 export interface AdminMaterialJobCreate {

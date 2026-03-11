@@ -43,7 +43,7 @@ export const ConceptLearningPage: React.FC = () => {
   const [editValue, setEditValue] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [bookmarks, setBookmarks] = useState<ConceptBookmarkResponse[]>([]);
-  const [detailedFocusMap, setDetailedFocusMap] = useState<Record<string, number>>({});
+  const [detailedOpenMap, setDetailedOpenMap] = useState<Record<string, string | null>>({});
   const [topicProgress, setTopicProgress] = useState<StudentTopicProgressResponse | null>(null);
   const [progressActionLoading, setProgressActionLoading] = useState(false);
 
@@ -386,7 +386,7 @@ export const ConceptLearningPage: React.FC = () => {
             />
           ) : null}
           {visibleSections.map((section) =>
-            renderSection(section, sectionRefs, detailedFocusMap, setDetailedFocusMap)
+            renderSection(section, sectionRefs, detailedOpenMap, setDetailedOpenMap)
           )}
         </main>
       </div>
@@ -538,6 +538,46 @@ const splitParagraphChunks = (text: string) => {
   return chunks;
 };
 
+type DetailedExplanationItem = {
+  key: string;
+  title: string;
+  summary: string;
+  body: React.ReactNode;
+};
+
+const truncatePreview = (text: string, maxChars = 140) => {
+  const cleaned = text.trim();
+  if (cleaned.length <= maxChars) {
+    return cleaned;
+  }
+  const shortened = cleaned.slice(0, maxChars).trim();
+  const safe = shortened.includes(" ")
+    ? shortened.slice(0, shortened.lastIndexOf(" "))
+    : shortened;
+  return `${safe || shortened}...`;
+};
+
+const buildDetailedTitle = (text: string, fallback: string) => {
+  const cleaned = text.trim();
+  if (!cleaned) {
+    return fallback;
+  }
+  const firstSentence = splitSentences(cleaned)[0] || cleaned;
+  const primary = firstSentence.split(/[:;,-]/, 1)[0]?.trim() || firstSentence.trim();
+  const words = primary.split(/\s+/).slice(0, 6);
+  const candidate = words.join(" ").replace(/[.?!]+$/, "").trim();
+  return candidate || fallback;
+};
+
+const buildDetailedSummary = (text: string) => {
+  const cleaned = text.trim();
+  if (!cleaned) {
+    return "";
+  }
+  const firstSentence = splitSentences(cleaned)[0] || cleaned;
+  return truncatePreview(firstSentence, 120);
+};
+
 const normalizeExampleSteps = (steps?: string[]) => {
   if (!steps?.length) {
     return [];
@@ -632,8 +672,8 @@ const getSectionDisplayTitle = (section: LearningSection) => {
 const renderSection = (
   section: LearningSection,
   refs: React.MutableRefObject<Record<string, HTMLElement | null>>,
-  detailedFocusMap: Record<string, number>,
-  setDetailedFocusMap: React.Dispatch<React.SetStateAction<Record<string, number>>>
+  detailedOpenMap: Record<string, string | null>,
+  setDetailedOpenMap: React.Dispatch<React.SetStateAction<Record<string, string | null>>>
 ): React.ReactNode => {
   const HeadingTag = section.level === 3 ? "h3" : "h2";
   const isStep = isStepSection(section);
@@ -675,34 +715,40 @@ const renderSection = (
         skipParagraphText
       })
     : [];
-  const detailedActiveIndex = isDetailed
-    ? Math.min(
-        Math.max(detailedFocusMap[section.id] ?? 0, 0),
-        Math.max(detailedItems.length - 1, 0)
-      )
-    : 0;
-  const blockContent = isDetailed ? (
+  const detailedActiveKey = isDetailed ? detailedOpenMap[section.id] ?? null : null;
+  const hasActiveDetailedItem = Boolean(detailedActiveKey);
+  const blockContent = isDetailed && detailedItems.length ? (
     <div className="learning-explain-stack">
       {detailedItems.map((item, index) => {
-        const isActive = index === detailedActiveIndex;
+        const isActive = item.key === detailedActiveKey;
         return (
           <button
             key={item.key}
             type="button"
-            className={`learning-explain-card ${isActive ? "active" : "dimmed"}`}
+            className={`learning-explain-card ${
+              isActive ? "active" : hasActiveDetailedItem ? "dimmed" : ""
+            }`}
             aria-expanded={isActive}
+            aria-controls={`${section.id}-${item.key}`}
             onClick={() =>
-              setDetailedFocusMap((prev) => ({ ...prev, [section.id]: index }))
+              setDetailedOpenMap((prev) => ({
+                ...prev,
+                [section.id]: prev[section.id] === item.key ? null : item.key
+              }))
             }
           >
             <div className="learning-explain-index">{index + 1}</div>
             <div className="learning-explain-body">
-              <p className="learning-explain-lead">{item.lead}</p>
-              <div className={`learning-explain-content ${isActive ? "open" : ""}`}>
+              <p className="learning-explain-title">{item.title}</p>
+              <p className="learning-explain-summary">{item.summary}</p>
+              <div
+                id={`${section.id}-${item.key}`}
+                className={`learning-explain-content ${isActive ? "open" : ""}`}
+              >
                 {item.body}
               </div>
               <span className="learning-explain-toggle">
-                {isActive ? "Focused" : "Tap to expand"}
+                {isActive ? "Tap to collapse" : "Tap to read the full point"}
               </span>
             </div>
           </button>
@@ -740,7 +786,7 @@ const renderSection = (
         </>
       )}
       {section.children?.map((child) =>
-        renderSection(child, refs, detailedFocusMap, setDetailedFocusMap)
+        renderSection(child, refs, detailedOpenMap, setDetailedOpenMap)
       )}
     </section>
   );
@@ -882,7 +928,7 @@ const buildDetailedItems = (
   blocks: LearningBlock[],
   context?: BlockRenderContext
 ) => {
-  const items: Array<{ key: string; lead: string; body: React.ReactNode }> = [];
+  const items: DetailedExplanationItem[] = [];
   blocks.forEach((block, blockIndex) => {
     if (block.type === "paragraph") {
       if (context?.skipParagraphText) {
@@ -893,41 +939,48 @@ const buildDetailedItems = (
       }
       const chunks = splitParagraphChunks(block.text);
       chunks.forEach((chunk, chunkIndex) => {
-        const sentences = splitSentences(chunk);
-        const lead = sentences[0] || chunk;
-        const rest =
-          sentences.length > 1 ? sentences.slice(1).join(" ").trim() : "";
         items.push({
           key: `detailed-paragraph-${blockIndex}-${chunkIndex}`,
-          lead,
-          body: rest ? <p className="learning-paragraph">{rest}</p> : null
+          title: buildDetailedTitle(chunk, `Point ${items.length + 1}`),
+          summary: buildDetailedSummary(chunk),
+          body: <p className="learning-paragraph">{chunk}</p>
         });
       });
       return;
     }
     if (block.type === "list") {
+      const summary = truncatePreview(block.items.slice(0, 2).join(" • "), 120);
       items.push({
         key: `detailed-list-${blockIndex}`,
-        lead: "Key Points",
+        title: "Key Points",
+        summary: summary || "Open to review the full list of important points.",
         body: renderListBlock(block)
       });
       return;
     }
     const node = renderBlock(block, { ...context, isDetailed: false });
     if (node) {
-      let lead = "Focus Note";
+      let title = "Focus Note";
+      let summary = "Open to review the full explanation for this point.";
       if (block.type === "formula") {
-        lead = block.title?.trim() || "Formula";
+        title = block.title?.trim() || "Formula";
+        summary = buildDetailedSummary(block.explanation || block.formula);
       } else if (block.type === "example") {
-        lead = block.title?.trim() || "Example";
+        title = block.title?.trim() || "Example";
+        summary = buildDetailedSummary(block.prompt || block.result || block.steps?.[0] || title);
       } else if (block.type === "callout") {
-        lead = block.title?.trim() || "Important";
+        title = block.title?.trim() || "Important";
+        summary = buildDetailedSummary(
+          Array.isArray(block.content) ? block.content[0] || title : block.content || title
+        );
       } else if (block.type === "code") {
-        lead = "Code Example";
+        title = "Code Example";
+        summary = "Open to review the complete code example and explanation.";
       }
       items.push({
         key: `detailed-block-${blockIndex}`,
-        lead,
+        title,
+        summary,
         body: node
       });
     }

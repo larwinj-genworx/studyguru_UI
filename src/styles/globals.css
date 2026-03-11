@@ -1565,6 +1565,15 @@ p {
   box-shadow: 0 22px 44px rgba(15, 23, 42, 0.1);
 }
 
+.flashcard-stage-header {
+  width: min(460px, 100%);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
 .flashcard-count {
   font-size: 0.82rem;
   color: var(--primary);
@@ -1573,9 +1582,20 @@ p {
   border-radius: 999px;
 }
 
+.flashcard-kind {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+  background: rgba(242, 179, 74, 0.18);
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+}
+
 .flashcard {
   width: min(460px, 100%);
-  min-height: 240px;
+  min-height: 290px;
   border-radius: 20px;
   border: 1px solid rgba(31, 79, 130, 0.2);
   background: linear-gradient(160deg, #ffffff 0%, #eaf5ff 100%);
@@ -1586,6 +1606,7 @@ p {
   box-shadow: 0 28px 50px rgba(18, 38, 63, 0.16);
   overflow: hidden;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  appearance: none;
 }
 
 .flashcard:hover {
@@ -1618,13 +1639,13 @@ p {
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 0.8rem;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 0.9rem;
   backface-visibility: hidden;
   transition: transform 0.45s ease, opacity 0.45s ease;
   border-radius: 16px;
-  text-align: center;
+  text-align: left;
 }
 
 .flashcard-face.front {
@@ -1655,22 +1676,54 @@ p {
   background: rgba(47, 110, 168, 0.16);
   padding: 0.3rem 0.7rem;
   border-radius: 999px;
+  margin-top: auto;
 }
 
-.flashcard-face p {
-  font-size: 1.05rem;
-  font-weight: 600;
-  line-height: 1.5;
-  color: var(--ink-0);
+.flashcard-kicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(31, 79, 130, 0.1);
+  color: var(--primary);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.flashcard-title {
   margin: 0;
+  font-size: 1.26rem;
+  line-height: 1.35;
+  color: var(--ink-0);
 }
 
-.flashcard-face.back p {
-  font-weight: 500;
+.flashcard-summary,
+.flashcard-answer {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--ink-1);
+}
+
+.flashcard-summary {
+  color: var(--muted);
+}
+
+.flashcard-answer-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--ink-1);
+  line-height: 1.65;
+}
+
+.flashcard-answer-list li + li {
+  margin-top: 0.32rem;
 }
 
 .flashcard-face::before {
-  content: "Question";
+  content: "Recall";
   position: absolute;
   top: 0.9rem;
   left: 1.1rem;
@@ -1943,24 +1996,31 @@ p {
   gap: 0.5rem;
 }
 
-.learning-explain-lead {
+.learning-explain-title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 600;
-  color: var(--ink-1);
+  color: var(--ink-0);
 }
 
+.learning-explain-summary {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
 
 .learning-explain-content {
   max-height: 0;
   overflow: hidden;
   opacity: 0;
-  transition: max-height 0.25s ease, opacity 0.2s ease;
+  transition: max-height 0.28s ease, opacity 0.2s ease, margin-top 0.2s ease;
 }
 
 .learning-explain-content.open {
-  max-height: 900px;
+  max-height: 1200px;
   opacity: 1;
+  margin-top: 0.25rem;
+  padding-top: 0.1rem;
 }
 
 .learning-explain-toggle {
@@ -3511,12 +3571,20 @@ p {
   .material-video {
     height: 45vh;
   }
+  .flashcard-stage-header {
+    width: 100%;
+  }
   .flashcard {
-    min-height: 210px;
+    min-height: 250px;
     padding: 1.2rem;
   }
-  .flashcard-face p {
-    font-size: 0.98rem;
+  .flashcard-title {
+    font-size: 1.08rem;
+  }
+  .flashcard-summary,
+  .flashcard-answer,
+  .flashcard-answer-list {
+    font-size: 0.95rem;
   }
   .flashcard-stage {
     padding: 1rem;
@@ -3593,29 +3661,32 @@ p {
   .learning-step-card {
     padding: 0.85rem 0.95rem;
   }
-    .learning-step-title {
-      font-size: 1.18rem;
-    }
-    .learning-explain-card {
-      padding: 0.8rem 0.9rem;
-    }
-    .learning-explain-stack {
-      gap: 0.9rem;
-      max-width: 100%;
-      padding-left: 0;
-    }
-    .learning-explain-card {
-      padding: 1rem 1.1rem;
-      grid-template-columns: 32px 1fr;
-    }
-    .learning-explain-index {
-      width: 28px;
-      height: 28px;
-      font-size: 0.78rem;
-    }
-    .quiz-body {
-      grid-template-columns: 1fr;
-    }
+  .learning-step-title {
+    font-size: 1.18rem;
+  }
+  .learning-explain-stack {
+    gap: 0.9rem;
+    max-width: 100%;
+    padding-left: 0;
+  }
+  .learning-explain-card {
+    padding: 1rem 1.1rem;
+    grid-template-columns: 32px 1fr;
+  }
+  .learning-explain-index {
+    width: 28px;
+    height: 28px;
+    font-size: 0.78rem;
+  }
+  .learning-explain-title {
+    font-size: 0.96rem;
+  }
+  .learning-explain-summary {
+    font-size: 0.94rem;
+  }
+  .quiz-body {
+    grid-template-columns: 1fr;
+  }
   .quiz-side-panel {
     position: relative;
   }

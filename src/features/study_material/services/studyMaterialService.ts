@@ -492,17 +492,9 @@ export const getStudentFlashcards = async (
   conceptId: string
 ): Promise<FlashcardItem[]> => {
   const response = await api.get(
-    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/artifacts/flashcards_json`
+    `${BASE_PATH}/student/subjects/${subjectId}/concepts/${conceptId}/flashcards`
   );
-  const data = response.data;
-  if (Array.isArray(data) && data.length) {
-    const entry = data[0] as { flashcards?: FlashcardItem[] };
-    return Array.isArray(entry.flashcards) ? entry.flashcards : [];
-  }
-  if (data && Array.isArray(data.flashcards)) {
-    return data.flashcards as FlashcardItem[];
-  }
-  return [];
+  return Array.isArray(response.data) ? (response.data as FlashcardItem[]) : [];
 };
 
 export const getStudentResources = async (
