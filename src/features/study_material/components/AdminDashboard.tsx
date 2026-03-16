@@ -1,7 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useNavigate } from "react-router-dom";
-
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -31,7 +29,6 @@ import {
   fetchAdminConceptArtifact,
   getJobStatus,
   getSubject,
-  listAdminEnrolledStudents,
   listAdminJobs,
   listAdminSubjects,
   listAdminSubjectMaterials,
@@ -45,7 +42,6 @@ import {
   unpublishSubject
 } from "@/features/study_material/services/studyMaterialService";
 import type {
-  AdminEnrolledStudentResponse,
   AdminConceptPlanUpdateRequest,
   AdminMaterialJobCreate,
   AdminMaterialPublishRequest,
@@ -94,7 +90,6 @@ const isPendingReviewGroup = (
 ): value is PendingReviewGroup => value !== null;
 
 export const AdminDashboard: React.FC = () => {
-  const navigate = useNavigate();
   const [subjects, setSubjects] = useState<SubjectResponse[]>([]);
   const [materialsMap, setMaterialsMap] = useState<Record<string, ConceptMaterialResponse[]>>({});
   const [jobMap, setJobMap] = useState<Record<string, MaterialJobStatusResponse>>({});
@@ -150,8 +145,6 @@ export const AdminDashboard: React.FC = () => {
     conceptId: string;
     conceptName: string;
   } | null>(null);
-  const [enrolledStudents, setEnrolledStudents] = useState<AdminEnrolledStudentResponse[]>([]);
-  const [enrollmentsLoading, setEnrollmentsLoading] = useState(false);
   const jobStatusRef = useRef<string | null>(null);
 
   const activeSubject = activeSubjectId
@@ -398,25 +391,6 @@ export const AdminDashboard: React.FC = () => {
         .catch(() => null);
     }
   }, [activeSubjectId, materialsMap]);
-
-  useEffect(() => {
-    if (!activeSubjectId) {
-      setEnrolledStudents([]);
-      return;
-    }
-    const fetchEnrolledStudents = async () => {
-      setEnrollmentsLoading(true);
-      try {
-        const response = await listAdminEnrolledStudents(activeSubjectId);
-        setEnrolledStudents(response);
-      } catch {
-        setEnrolledStudents([]);
-      } finally {
-        setEnrollmentsLoading(false);
-      }
-    };
-    fetchEnrolledStudents();
-  }, [activeSubjectId]);
 
   useEffect(() => {
     if (!subjects.length) {
@@ -793,52 +767,6 @@ export const AdminDashboard: React.FC = () => {
       return "Unknown time";
     }
     return date.toLocaleString();
-  };
-
-  const formatStudentMetricDate = (value?: string | null) => {
-    if (!value) {
-      return "No activity yet";
-    }
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return "No activity yet";
-    }
-    return date.toLocaleString();
-  };
-
-  const formatAccuracy = (value?: number | null) => {
-    if (typeof value !== "number") {
-      return "N/A";
-    }
-    return `${Math.round(value * 100)}%`;
-  };
-
-  const getStudentActivityBadge = (student: AdminEnrolledStudentResponse) => {
-    if (!student.overview.last_activity_at) {
-      return { variant: "neutral" as const, label: "New" };
-    }
-    const elapsed = Date.now() - new Date(student.overview.last_activity_at).getTime();
-    const days = elapsed / (1000 * 60 * 60 * 24);
-    if (days <= 7) {
-      return { variant: "success" as const, label: "Active" };
-    }
-    if (days <= 21) {
-      return { variant: "info" as const, label: "Monitoring" };
-    }
-    return { variant: "warning" as const, label: "Quiet" };
-  };
-
-  const handleRefreshEnrollments = async () => {
-    if (!activeSubjectId) {
-      return;
-    }
-    setEnrollmentsLoading(true);
-    try {
-      const response = await listAdminEnrolledStudents(activeSubjectId);
-      setEnrolledStudents(response);
-    } finally {
-      setEnrollmentsLoading(false);
-    }
   };
 
   const openPreview = async (options: {
@@ -1584,115 +1512,6 @@ export const AdminDashboard: React.FC = () => {
           )}
         </Card>
       </div>
-
-      {activeSubject ? (
-        <Card className="panel admin-enrollment-panel">
-          <div className="panel-header">
-            <div>
-              <h3>Enrolled Students</h3>
-              <p className="muted">
-                Review enrollment, learning momentum, and direct student activity for{" "}
-                {activeSubject.name}.
-              </p>
-            </div>
-            <div className="inline-actions">
-              <Badge variant={enrolledStudents.length ? "info" : "neutral"}>
-                {enrolledStudents.length} enrolled
-              </Badge>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRefreshEnrollments}
-                disabled={enrollmentsLoading}
-              >
-                Refresh
-              </Button>
-            </div>
-          </div>
-          {enrollmentsLoading ? (
-            <div className="inline-loading">
-              <LoadingSpinner />
-            </div>
-          ) : enrolledStudents.length ? (
-            <div className="student-roster-grid">
-              {enrolledStudents.map((student) => {
-                const activityBadge = getStudentActivityBadge(student);
-                return (
-                  <Card key={student.student_id} className="student-roster-card">
-                    <div className="student-roster-header">
-                      <div>
-                        <h4>{student.student_email}</h4>
-                        <p className="muted">
-                          Enrolled {formatStudentMetricDate(student.enrolled_at)}
-                        </p>
-                      </div>
-                      <Badge variant={activityBadge.variant}>{activityBadge.label}</Badge>
-                    </div>
-                    <div className="student-roster-metrics">
-                      <div className="student-roster-metric">
-                        <span>Progress</span>
-                        <strong>{student.overview.progress_percent}%</strong>
-                      </div>
-                      <div className="student-roster-metric">
-                        <span>Passed Topics</span>
-                        <strong>
-                          {student.overview.completed_topics}/{student.overview.total_concepts}
-                        </strong>
-                      </div>
-                      <div className="student-roster-metric">
-                        <span>Current Topic</span>
-                        <strong>
-                          {student.overview.current_topic_order
-                            ? `Topic ${student.overview.current_topic_order}`
-                            : "Completed"}
-                        </strong>
-                      </div>
-                      <div className="student-roster-metric">
-                        <span>Avg Accuracy</span>
-                        <strong>{formatAccuracy(student.overview.average_quiz_accuracy)}</strong>
-                      </div>
-                    </div>
-                    <div className="student-roster-footer">
-                      <div>
-                        <p className="muted">
-                          {student.overview.current_topic_name
-                            ? `Working on ${student.overview.current_topic_name}`
-                            : "All ordered topics are cleared."}
-                        </p>
-                        <p className="muted">
-                          {student.overview.failed_assessments
-                            ? `${student.overview.failed_assessments} topic(s) need assessment retry`
-                            : `Last activity ${formatStudentMetricDate(student.overview.last_activity_at)}`}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() =>
-                          navigate(
-                            `/admin/subjects/${activeSubject.subject_id}/students/${student.student_id}`
-                          )
-                        }
-                      >
-                        View Activity
-                      </Button>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState
-              title={activeSubject.published ? "No students enrolled yet" : "Waiting for publish"}
-              description={
-                activeSubject.published
-                  ? "Students will appear here as soon as they enroll in this syllabus."
-                  : "Publish this syllabus to make enrollment available for students."
-              }
-            />
-          )}
-        </Card>
-      ) : null}
 
       <Modal
         open={showSubjectModal}

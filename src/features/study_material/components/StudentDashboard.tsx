@@ -28,14 +28,13 @@ import {
 } from "@/features/study_material/slices/studentLearningSlice";
 import {
   downloadStudentSubjectArtifact,
-  enrollInSubject,
   fetchStudentConceptArtifact,
   fetchStudentSubjectArtifact,
   getStudentFlashcards,
   getStudentResources,
+  listStudentSubjects,
   listPublishedConcepts,
-  listPublishedMaterials,
-  listPublishedSubjects
+  listPublishedMaterials
 } from "@/features/study_material/services/studyMaterialService";
 import {
   formatFlashcardKindLabel,
@@ -99,24 +98,25 @@ export const StudentDashboard: React.FC = () => {
   const [quizStarting, setQuizStarting] = useState(false);
   const [quizStartMessage, setQuizStartMessage] = useState<string | null>(null);
   const [assessmentStartingConceptId, setAssessmentStartingConceptId] = useState<string | null>(null);
-  const [enrollingSubjectId, setEnrollingSubjectId] = useState<string | null>(null);
   const bookmarks = useAppSelector((state) => selectStudentBookmarks(state, activeSubjectId));
   const progression = useAppSelector((state) => selectStudentProgression(state, activeSubjectId));
   const progressionStatus = useAppSelector((state) =>
     selectStudentProgressionStatus(state, activeSubjectId)
   );
+  const activeSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
+  const subjectIsPublished = Boolean(activeSubject?.published);
 
   useEffect(() => {
     const fetchSubjects = async () => {
       setLoading(true);
       try {
-        const response = await listPublishedSubjects();
+        const response = await listStudentSubjects();
         setSubjects(response);
         if (response.length) {
           setActiveSubjectId(response[0].subject_id);
         }
       } catch (err: any) {
-        setError(err?.response?.data?.detail || "Failed to load published subjects.");
+        setError(err?.response?.data?.detail || "Failed to load organization courses.");
       } finally {
         setLoading(false);
       }
@@ -125,18 +125,14 @@ export const StudentDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!activeSubjectId) {
-      return;
-    }
-    const selectedSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
-    if (!selectedSubject?.is_enrolled) {
+    if (!activeSubjectId || !activeSubject?.published) {
       setConcepts([]);
       setMaterials([]);
-      setLoading(false);
       return;
     }
     const fetchDetails = async () => {
       setLoading(true);
+      setError(null);
       try {
         const [conceptsResponse, materialsResponse] = await Promise.all([
           listPublishedConcepts(activeSubjectId),
@@ -151,19 +147,15 @@ export const StudentDashboard: React.FC = () => {
       }
     };
     fetchDetails();
-  }, [activeSubjectId, subjects]);
+  }, [activeSubject?.published, activeSubjectId]);
 
   useEffect(() => {
-    if (!activeSubjectId) {
-      return;
-    }
-    const selectedSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
-    if (!selectedSubject?.is_enrolled) {
+    if (!activeSubjectId || !activeSubject?.published) {
       return;
     }
     void dispatch(fetchStudentBookmarks(activeSubjectId));
     void dispatch(fetchStudentProgression(activeSubjectId));
-  }, [activeSubjectId, dispatch, subjects]);
+  }, [activeSubject?.published, activeSubjectId, dispatch]);
 
   useEffect(() => {
     setFlashcardMeta(null);
@@ -179,16 +171,17 @@ export const StudentDashboard: React.FC = () => {
     setPreviewOpen(false);
     setPreviewBlob(null);
     setPreviewError(null);
+    setError(null);
     setSearchQuery("");
     setSelectedConceptIds([]);
     setQuizStartMessage(null);
     setAssessmentStartingConceptId(null);
   }, [activeSubjectId]);
 
-  const activeSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
-  const canAccessActiveSubject = Boolean(activeSubject?.is_enrolled);
+  const canAccessActiveSubject = Boolean(activeSubject);
   const isProgressionLoading =
     canAccessActiveSubject &&
+    subjectIsPublished &&
     progression === null &&
     (progressionStatus === "idle" || progressionStatus === "loading");
   const isDashboardLoading = loading || isProgressionLoading;
@@ -497,32 +490,6 @@ export const StudentDashboard: React.FC = () => {
     window.open(topicUrl.toString(), "_blank", "noopener,noreferrer");
   };
 
-  const handleEnrollSubject = async () => {
-    if (!activeSubject) {
-      return;
-    }
-    setEnrollingSubjectId(activeSubject.subject_id);
-    setError(null);
-    try {
-      const enrollment = await enrollInSubject(activeSubject.subject_id);
-      setSubjects((prev) =>
-        prev.map((subject) =>
-          subject.subject_id === activeSubject.subject_id
-            ? {
-                ...subject,
-                is_enrolled: true,
-                enrolled_at: enrollment.enrolled_at
-              }
-            : subject
-        )
-      );
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || "Failed to enroll in this syllabus.");
-    } finally {
-      setEnrollingSubjectId(null);
-    }
-  };
-
   const getTopicProgressMeta = (
     state: StudentSubjectProgressResponse["topics"][number]["state"]
   ) => {
@@ -543,19 +510,19 @@ export const StudentDashboard: React.FC = () => {
   return (
     <DashboardLayout
       title="Student Library"
-      subtitle="Explore published study materials."
+      subtitle="Access the study materials assigned by your organization."
       showHeader={false}
     >
       <PageHeader
         title="Your Study Library"
-        subtitle="Browse published syllabi, preview materials, open flashcards, and download when needed."
+        subtitle="Open every course created for your organization, and continue learning when published materials are ready."
       />
       {error ? <div className="alert danger">{error}</div> : null}
 
       <div className="grid two-col">
         <Card className="panel student-subjects-panel">
           <div className="panel-header">
-            <h3>Published Syllabi</h3>
+            <h3>Organization Courses</h3>
           </div>
           {subjects.length ? (
             <div className="list-stack">
@@ -568,10 +535,13 @@ export const StudentDashboard: React.FC = () => {
                   <div className="subject-list-row">
                     <div>
                       <p className="list-title">{subject.name}</p>
-                      <span className="list-subtitle">Grade {subject.grade_level}</span>
+                      <span className="list-subtitle">
+                        Grade {subject.grade_level} •{" "}
+                        {subject.published ? "Ready to study" : "Preparing content"}
+                      </span>
                     </div>
-                    <Badge variant={subject.is_enrolled ? "success" : "info"}>
-                      {subject.is_enrolled ? "Enrolled" : "Preview"}
+                    <Badge variant={subject.published ? "success" : "warning"}>
+                      {subject.published ? "Live" : "Preparing"}
                     </Badge>
                   </div>
                 </button>
@@ -579,8 +549,8 @@ export const StudentDashboard: React.FC = () => {
             </div>
           ) : (
             <EmptyState
-              title="No published syllabus yet"
-              description="Ask your instructor to publish study materials."
+              title="No courses available yet"
+              description="Courses created by your organization will appear here automatically."
             />
           )}
         </Card>
@@ -588,7 +558,7 @@ export const StudentDashboard: React.FC = () => {
         <div className="stack">
           {!activeSubject ? (
             <Card className="panel">
-              <EmptyState title="Select a syllabus" description="Pick a syllabus to view materials." />
+              <EmptyState title="Select a course" description="Pick a course to view materials." />
             </Card>
           ) : (
             <Card className="panel">
@@ -603,7 +573,7 @@ export const StudentDashboard: React.FC = () => {
                   </p>
                 </div>
                 <div className="inline-actions">
-                  {progression ? (
+                  {subjectIsPublished && progression ? (
                     <>
                       <Badge variant="info">{progression.progress_percent}% Progress</Badge>
                       <Badge variant="neutral">
@@ -611,50 +581,21 @@ export const StudentDashboard: React.FC = () => {
                       </Badge>
                     </>
                   ) : null}
-                  <Badge variant={canAccessActiveSubject ? "success" : "info"}>
-                    {canAccessActiveSubject ? "Enrolled" : "Preview Only"}
+                  <Badge variant={subjectIsPublished ? "success" : "warning"}>
+                    {subjectIsPublished ? "Live Course" : "Preparing Course"}
                   </Badge>
+                  <Badge variant="info">Organization Access</Badge>
                 </div>
               </div>
               {activeSubject.description ? <p>{activeSubject.description}</p> : null}
-              {progression ? (
+              {subjectIsPublished && progression ? (
                 <p className="muted">
                   {currentTopic
                     ? `Current topic: Topic ${currentTopic.topic_order} - ${currentTopic.name}. Pass ${currentTopic.pass_percentage}% to unlock the next topic.`
                     : "All published topics are completed."}
                 </p>
               ) : null}
-              {!canAccessActiveSubject ? (
-                <div className="enrollment-preview-card">
-                  <div className="enrollment-preview-header">
-                    <div>
-                      <p className="eyebrow">Student Access Control</p>
-                      <h4>Enroll to unlock the full syllabus</h4>
-                      <p className="muted">
-                        Detailed topics, learning pages, flashcards, resources, and tests stay
-                        hidden until you enroll in this course.
-                      </p>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      onClick={handleEnrollSubject}
-                      disabled={enrollingSubjectId === activeSubject.subject_id}
-                    >
-                      {enrollingSubjectId === activeSubject.subject_id ? "Enrolling..." : "Enroll"}
-                    </Button>
-                  </div>
-                  <div className="enrollment-preview-grid">
-                    <div className="enrollment-preview-item">
-                      <span>Access unlocks</span>
-                      <strong>Topics, quizzes, PDFs, flashcards</strong>
-                    </div>
-                    <div className="enrollment-preview-item">
-                      <span>Current view</span>
-                      <strong>Syllabus title and description only</strong>
-                    </div>
-                  </div>
-                </div>
-              ) : (
+              {subjectIsPublished ? (
                 <>
                   <div className="section">
                     <div className="section-header">
@@ -921,6 +862,17 @@ export const StudentDashboard: React.FC = () => {
                     )}
                   </div>
                 </>
+              ) : (
+                <div className="student-course-pending">
+                  <div className="student-course-pending-badge">
+                    <Badge variant="warning">Publishing in Progress</Badge>
+                  </div>
+                  <h4>This course is visible to you already</h4>
+                  <p className="muted">
+                    Your organization has created this course. Topics, quizzes, and downloadable
+                    materials will appear here as soon as the admin publishes them.
+                  </p>
+                </div>
               )}
             </Card>
           )}
@@ -1032,7 +984,7 @@ export const StudentDashboard: React.FC = () => {
         ) : (
           <EmptyState
             title="No flashcards yet"
-            description="Flashcards will appear once the syllabus is fully published."
+            description="Flashcards will appear once the course is fully published."
           />
         )}
       </Modal>
@@ -1105,9 +1057,3 @@ export const StudentDashboard: React.FC = () => {
     </DashboardLayout>
   );
 };
-
-
-
-
-
-

@@ -4,9 +4,7 @@ import {
   fetchSession,
   login,
   logout,
-  signup,
-  type LoginRequest,
-  type SignupRequest
+  type LoginRequest
 } from "@/features/auth/services/authService";
 import type { AuthUser, UserRole } from "@/features/auth/types";
 
@@ -66,18 +64,6 @@ export const loginUser = createAsyncThunk<AuthUser, LoginUserPayload, { rejectVa
       return response.user;
     } catch (error) {
       return rejectWithValue(getErrorMessage(error, "Invalid credentials."));
-    }
-  }
-);
-
-export const signupUser = createAsyncThunk<AuthUser, SignupRequest, { rejectValue: string }>(
-  "auth/signupUser",
-  async (payload, { rejectWithValue }) => {
-    try {
-      const response = await signup(payload);
-      return response.user;
-    } catch (error) {
-      return rejectWithValue(getErrorMessage(error, "Signup failed."));
     }
   }
 );

@@ -293,7 +293,7 @@ export const AdminStudentActivityPage: React.FC = () => {
       { label: "Student ID", value: activity.student_id, mono: true },
       { label: "Subject", value: activity.subject_name },
       { label: "Grade", value: formatGradeLevel(activity.grade_level) },
-      { label: "Enrolled On", value: formatDate(activity.enrolled_at) },
+      { label: "Assigned On", value: formatDate(activity.enrolled_at) },
       {
         label: "Last Active",
         value: formatDateTimeOr(activity.overview.last_activity_at, "No activity recorded")

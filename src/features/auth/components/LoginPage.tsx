@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -120,9 +120,7 @@ export const LoginPage: React.FC = () => {
             <Button type="submit" variant={isAdmin ? "primary" : "secondary"}>
               {roleCta}
             </Button>
-            <p className="muted">
-              New here? <Link to="/signup">Create an account</Link>
-            </p>
+            <p className="muted">Your organization administrator must create your account.</p>
           </form>
         </Card>
       </div>

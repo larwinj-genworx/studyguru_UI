@@ -1,6 +1,9 @@
 ﻿import { api } from "@/lib/axios";
 import type {
   AdminConceptPlanUpdateRequest,
+  AdminManagedStudentCreateRequest,
+  AdminManagedStudentResponse,
+  AdminManagedStudentUpdateRequest,
   AdminMaterialApproveRequest,
   AdminMaterialJobCreate,
   AdminEnrolledStudentResponse,
@@ -19,7 +22,6 @@ import type {
   ResourceItem,
   StudentSubjectProgressResponse,
   StudentTopicProgressResponse,
-  SubjectEnrollmentResponse,
   SubjectCreate,
   SubjectResponse
 } from "@/features/study_material/types";
@@ -128,15 +130,8 @@ export const unpublishSubject = async (subjectId: string): Promise<SubjectRespon
   return response.data;
 };
 
-export const listPublishedSubjects = async (): Promise<SubjectResponse[]> => {
+export const listStudentSubjects = async (): Promise<SubjectResponse[]> => {
   const response = await api.get(`${BASE_PATH}/student/subjects`);
-  return response.data;
-};
-
-export const enrollInSubject = async (
-  subjectId: string
-): Promise<SubjectEnrollmentResponse> => {
-  const response = await api.post(`${BASE_PATH}/student/subjects/${subjectId}/enroll`, {});
   return response.data;
 };
 
@@ -257,6 +252,26 @@ export const listAdminEnrolledStudents = async (
   subjectId: string
 ): Promise<AdminEnrolledStudentResponse[]> => {
   const response = await api.get(`${BASE_PATH}/admin/subjects/${subjectId}/enrollments`);
+  return response.data;
+};
+
+export const listAdminStudents = async (): Promise<AdminManagedStudentResponse[]> => {
+  const response = await api.get(`${BASE_PATH}/admin/students`);
+  return response.data;
+};
+
+export const createAdminStudent = async (
+  payload: AdminManagedStudentCreateRequest
+): Promise<AdminManagedStudentResponse> => {
+  const response = await api.post(`${BASE_PATH}/admin/students`, payload);
+  return response.data;
+};
+
+export const updateAdminStudent = async (
+  studentId: string,
+  payload: AdminManagedStudentUpdateRequest
+): Promise<AdminManagedStudentResponse> => {
+  const response = await api.patch(`${BASE_PATH}/admin/students/${studentId}`, payload);
   return response.data;
 };
 

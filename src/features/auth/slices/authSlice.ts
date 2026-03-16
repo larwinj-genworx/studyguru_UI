@@ -3,8 +3,7 @@ import { createSlice } from "@reduxjs/toolkit";
 import {
   hydrateSession,
   loginUser,
-  logoutUser,
-  signupUser
+  logoutUser
 } from "@/features/auth/slices/authThunks";
 import type { AuthState, AuthUser } from "@/features/auth/types";
 
@@ -13,7 +12,8 @@ const initialState: AuthState = {
   isAuthenticated: false,
   role: null,
   email: null,
-  userId: null
+  userId: null,
+  organizationId: null
 };
 
 const applyAuthenticatedUser = (state: AuthState, user: AuthUser) => {
@@ -22,6 +22,7 @@ const applyAuthenticatedUser = (state: AuthState, user: AuthUser) => {
   state.role = user.role;
   state.email = user.email;
   state.userId = user.user_id;
+  state.organizationId = user.organization_id;
 };
 
 const clearAuthenticatedUser = (state: AuthState) => {
@@ -30,6 +31,7 @@ const clearAuthenticatedUser = (state: AuthState) => {
   state.role = null;
   state.email = null;
   state.userId = null;
+  state.organizationId = null;
 };
 
 const authSlice = createSlice({
@@ -56,15 +58,6 @@ const authSlice = createSlice({
         applyAuthenticatedUser(state, action.payload);
       })
       .addCase(loginUser.rejected, (state) => {
-        clearAuthenticatedUser(state);
-      })
-      .addCase(signupUser.pending, (state) => {
-        state.status = "loading";
-      })
-      .addCase(signupUser.fulfilled, (state, action) => {
-        applyAuthenticatedUser(state, action.payload);
-      })
-      .addCase(signupUser.rejected, (state) => {
         clearAuthenticatedUser(state);
       })
       .addCase(logoutUser.fulfilled, (state) => {

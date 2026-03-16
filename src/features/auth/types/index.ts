@@ -6,6 +6,7 @@ export interface AuthUser {
   user_id: string;
   email: string;
   role: Exclude<UserRole, null>;
+  organization_id: string;
 }
 
 export interface AuthState {
@@ -14,6 +15,7 @@ export interface AuthState {
   role: UserRole;
   email: string | null;
   userId: string | null;
+  organizationId: string | null;
 }
 
 export interface AuthResponse {
