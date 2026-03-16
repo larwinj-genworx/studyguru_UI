@@ -1,13 +1,12 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { AuthLayout } from "@/layouts/AuthLayout";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
+import { AuthLayout } from "@/layouts/AuthLayout";
+import { loginUser } from "@/features/auth/slices/authThunks";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
-import { loginSuccess } from "@/features/auth/slices/authSlice";
-import { login } from "@/features/auth/services/authService";
 
 interface LoginFormState {
   email: string;
@@ -36,28 +35,21 @@ export const LoginPage: React.FC = () => {
     event.preventDefault();
     const form = expectedRole === "admin" ? adminForm : studentForm;
     const setForm = expectedRole === "admin" ? setAdminForm : setStudentForm;
+
     try {
-      const response = await login({ email: form.email.trim(), password: form.password });
-      if (response.user.role !== expectedRole) {
-        setForm((prev) => ({
-          ...prev,
-          error: `Please sign in using your ${expectedRole} account.`
-        }));
-        return;
-      }
-      dispatch(
-        loginSuccess({
-          role: response.user.role,
-          email: response.user.email,
-          userId: response.user.user_id,
-          accessToken: response.access_token
+      const user = await dispatch(
+        loginUser({
+          email: form.email.trim(),
+          password: form.password,
+          expectedRole
         })
-      );
-      navigate(response.user.role === "admin" ? "/admin" : "/student");
-    } catch (err: any) {
+      ).unwrap();
+
+      navigate(user.role === "admin" ? "/admin" : "/student");
+    } catch (error) {
       setForm((prev) => ({
         ...prev,
-        error: err?.response?.data?.detail || "Invalid credentials."
+        error: typeof error === "string" ? error : "Invalid credentials."
       }));
     }
   };
@@ -103,9 +95,7 @@ export const LoginPage: React.FC = () => {
             <p className="muted">{roleDescription}</p>
           </div>
           <form
-            onSubmit={(event) =>
-              handleSubmit(event, isAdmin ? "admin" : "student")
-            }
+            onSubmit={(event) => handleSubmit(event, isAdmin ? "admin" : "student")}
             className="form-stack"
           >
             <Input

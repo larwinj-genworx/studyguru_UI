@@ -1,10 +1,9 @@
-﻿import React from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
 
+import { logoutUser } from "@/features/auth/slices/authThunks";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
-import { logout } from "@/features/auth/slices/authSlice";
-import { clearAuthState } from "@/utils/storage";
 
 interface DashboardLayoutProps {
   title: string;
@@ -23,9 +22,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   const navigate = useNavigate();
   const { role, email } = useAppSelector((state) => state.auth);
 
-  const handleLogout = () => {
-    dispatch(logout());
-    clearAuthState();
+  const handleLogout = async () => {
+    await dispatch(logoutUser());
     navigate("/login");
   };
 

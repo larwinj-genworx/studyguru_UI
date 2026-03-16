@@ -1,13 +1,12 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { AuthLayout } from "@/layouts/AuthLayout";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
+import { AuthLayout } from "@/layouts/AuthLayout";
+import { signupUser } from "@/features/auth/slices/authThunks";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
-import { loginSuccess } from "@/features/auth/slices/authSlice";
-import { signup } from "@/features/auth/services/authService";
 
 interface SignupFormState {
   email: string;
@@ -44,24 +43,19 @@ export const SignupPage: React.FC = () => {
     }
 
     try {
-      const response = await signup({
-        email: form.email.trim(),
-        password: form.password,
-        role
-      });
-      dispatch(
-        loginSuccess({
-          role: response.user.role,
-          email: response.user.email,
-          userId: response.user.user_id,
-          accessToken: response.access_token
+      const user = await dispatch(
+        signupUser({
+          email: form.email.trim(),
+          password: form.password,
+          role
         })
-      );
-      navigate(response.user.role === "admin" ? "/admin" : "/student");
-    } catch (err: any) {
+      ).unwrap();
+
+      navigate(user.role === "admin" ? "/admin" : "/student");
+    } catch (error) {
       setForm((prev) => ({
         ...prev,
-        error: err?.response?.data?.detail || "Signup failed."
+        error: typeof error === "string" ? error : "Signup failed."
       }));
     }
   };

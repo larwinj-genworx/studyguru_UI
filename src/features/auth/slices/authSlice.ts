@@ -1,43 +1,76 @@
-﻿import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { createSlice } from "@reduxjs/toolkit";
 
-import type { AuthState, UserRole } from "@/types";
+import {
+  hydrateSession,
+  loginUser,
+  logoutUser,
+  signupUser
+} from "@/features/auth/slices/authThunks";
+import type { AuthState, AuthUser } from "@/features/auth/types";
 
 const initialState: AuthState = {
+  status: "idle",
   isAuthenticated: false,
   role: null,
   email: null,
-  userId: null,
-  accessToken: null
+  userId: null
 };
 
-interface LoginPayload {
-  role: Exclude<UserRole, null>;
-  email: string;
-  userId: string;
-  accessToken: string;
-}
+const applyAuthenticatedUser = (state: AuthState, user: AuthUser) => {
+  state.status = "authenticated";
+  state.isAuthenticated = true;
+  state.role = user.role;
+  state.email = user.email;
+  state.userId = user.user_id;
+};
+
+const clearAuthenticatedUser = (state: AuthState) => {
+  state.status = "unauthenticated";
+  state.isAuthenticated = false;
+  state.role = null;
+  state.email = null;
+  state.userId = null;
+};
 
 const authSlice = createSlice({
   name: "auth",
   initialState,
-  reducers: {
-    loginSuccess: (state, action: PayloadAction<LoginPayload>) => {
-      state.isAuthenticated = true;
-      state.role = action.payload.role;
-      state.email = action.payload.email;
-      state.userId = action.payload.userId;
-      state.accessToken = action.payload.accessToken;
-    },
-    logout: (state) => {
-      state.isAuthenticated = false;
-      state.role = null;
-      state.email = null;
-      state.userId = null;
-      state.accessToken = null;
-    }
+  reducers: {},
+  extraReducers: (builder) => {
+    builder
+      .addCase(hydrateSession.pending, (state) => {
+        if (state.status === "idle") {
+          state.status = "loading";
+        }
+      })
+      .addCase(hydrateSession.fulfilled, (state, action) => {
+        applyAuthenticatedUser(state, action.payload);
+      })
+      .addCase(hydrateSession.rejected, (state) => {
+        clearAuthenticatedUser(state);
+      })
+      .addCase(loginUser.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(loginUser.fulfilled, (state, action) => {
+        applyAuthenticatedUser(state, action.payload);
+      })
+      .addCase(loginUser.rejected, (state) => {
+        clearAuthenticatedUser(state);
+      })
+      .addCase(signupUser.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(signupUser.fulfilled, (state, action) => {
+        applyAuthenticatedUser(state, action.payload);
+      })
+      .addCase(signupUser.rejected, (state) => {
+        clearAuthenticatedUser(state);
+      })
+      .addCase(logoutUser.fulfilled, (state) => {
+        clearAuthenticatedUser(state);
+      });
   }
 });
-
-export const { loginSuccess, logout } = authSlice.actions;
 
 export default authSlice.reducer;

@@ -7,31 +7,36 @@ import { Modal } from "@/components/ui/Modal";
 import { TextArea } from "@/components/ui/TextArea";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { EmptyState } from "@/components/common/EmptyState";
+import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
 import { ApprovedConceptImageGallery } from "@/features/study_material/components/ApprovedConceptImageGallery";
 import { LearningBotWidget } from "@/features/study_material/components/LearningBotWidget";
 import {
-  addStudentBookmark,
+  selectStudentBookmarks,
+  selectStudentProgression
+} from "@/features/study_material/selectors/studentLearningSelectors";
+import {
+  completeStudentTopic,
+  fetchStudentBookmarks,
+  fetchStudentProgression,
+  toggleStudentBookmark
+} from "@/features/study_material/slices/studentLearningSlice";
+import {
   getAdminLearningContent,
   getStudentLearningContent,
-  getStudentSubjectProgression,
-  listStudentBookmarks,
-  markStudentTopicComplete,
-  removeStudentBookmark,
   updateAdminLearningContent
 } from "@/features/study_material/services/studyMaterialService";
 import { startTopicAssessment } from "@/features/quiz/services/quizService";
 import type {
-  ConceptBookmarkResponse,
   LearningBlock,
   LearningContentResponse,
-  LearningSection,
-  StudentTopicProgressResponse
+  LearningSection
 } from "@/features/study_material/types";
 
 export const ConceptLearningPage: React.FC = () => {
   const { subjectId, conceptId } = useParams();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { role } = useAppSelector((state) => state.auth);
 
   const [content, setContent] = useState<LearningContentResponse | null>(null);
@@ -42,10 +47,10 @@ export const ConceptLearningPage: React.FC = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
-  const [bookmarks, setBookmarks] = useState<ConceptBookmarkResponse[]>([]);
   const [detailedOpenMap, setDetailedOpenMap] = useState<Record<string, string | null>>({});
-  const [topicProgress, setTopicProgress] = useState<StudentTopicProgressResponse | null>(null);
   const [progressActionLoading, setProgressActionLoading] = useState(false);
+  const bookmarks = useAppSelector((state) => selectStudentBookmarks(state, subjectId));
+  const subjectProgression = useAppSelector((state) => selectStudentProgression(state, subjectId));
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
@@ -79,23 +84,15 @@ export const ConceptLearningPage: React.FC = () => {
     if (role !== "student" || !subjectId) {
       return;
     }
-    listStudentBookmarks(subjectId)
-      .then((items) => setBookmarks(items))
-      .catch(() => setBookmarks([]));
-  }, [role, subjectId, conceptId]);
+    void dispatch(fetchStudentBookmarks(subjectId));
+  }, [dispatch, role, subjectId]);
 
   useEffect(() => {
     if (role !== "student" || !subjectId || !conceptId) {
-      setTopicProgress(null);
       return;
     }
-    getStudentSubjectProgression(subjectId)
-      .then((response) => {
-        const currentTopic = response.topics.find((topic) => topic.concept_id === conceptId) || null;
-        setTopicProgress(currentTopic);
-      })
-      .catch(() => setTopicProgress(null));
-  }, [role, subjectId, conceptId]);
+    void dispatch(fetchStudentProgression(subjectId));
+  }, [conceptId, dispatch, role, subjectId]);
 
   useEffect(() => {
     if (!visibleSections.length) {
@@ -145,6 +142,10 @@ export const ConceptLearningPage: React.FC = () => {
     () => bookmarks.some((item) => item.concept_id === conceptId),
     [bookmarks, conceptId]
   );
+  const topicProgress = useMemo(
+    () => subjectProgression?.topics.find((topic) => topic.concept_id === conceptId) ?? null,
+    [conceptId, subjectProgression]
+  );
   const topicProgressMeta = useMemo(() => {
     switch (topicProgress?.state) {
       case "passed":
@@ -170,28 +171,19 @@ export const ConceptLearningPage: React.FC = () => {
   };
 
   const handleToggleBookmark = async () => {
-    if (!subjectId || !conceptId) {
+    if (!subjectId || !conceptId || !content) {
       return;
     }
     try {
-      if (bookmarked) {
-        await removeStudentBookmark(subjectId, conceptId);
-        setBookmarks((prev) => prev.filter((item) => item.concept_id !== conceptId));
-      } else if (content) {
-        await addStudentBookmark(subjectId, conceptId);
-        setBookmarks((prev) => [
-          ...prev,
-          {
-            concept_id: content.concept_id,
-            concept_name: content.concept_name,
-            subject_id: content.subject_id,
-            subject_name: content.subject_name,
-            created_at: new Date().toISOString()
-          }
-        ]);
-      }
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || "Failed to update bookmark.");
+      await dispatch(
+        toggleStudentBookmark({
+          subjectId,
+          conceptId,
+          currentlyBookmarked: bookmarked
+        })
+      ).unwrap();
+    } catch (err) {
+      setError(typeof err === "string" ? err : "Failed to update bookmark.");
     }
   };
 
@@ -202,10 +194,9 @@ export const ConceptLearningPage: React.FC = () => {
     setProgressActionLoading(true);
     setError(null);
     try {
-      const response = await markStudentTopicComplete(subjectId, conceptId);
-      setTopicProgress(response);
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || "Failed to mark this topic as completed.");
+      await dispatch(completeStudentTopic({ subjectId, conceptId })).unwrap();
+    } catch (err) {
+      setError(typeof err === "string" ? err : "Failed to mark this topic as completed.");
     } finally {
       setProgressActionLoading(false);
     }

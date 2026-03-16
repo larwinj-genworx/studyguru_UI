@@ -10,22 +10,30 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { PageHeader } from "@/components/common/PageHeader";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Modal } from "@/components/ui/Modal";
+import { useAppDispatch } from "@/hooks/useAppDispatch";
+import { useAppSelector } from "@/hooks/useAppSelector";
 import {
   MaterialPreviewModal,
   type PreviewFileType
 } from "@/features/study_material/components/MaterialPreviewModal";
+import {
+  selectStudentBookmarks,
+  selectStudentProgression,
+  selectStudentProgressionStatus
+} from "@/features/study_material/selectors/studentLearningSelectors";
+import {
+  fetchStudentBookmarks,
+  fetchStudentProgression,
+  toggleStudentBookmark
+} from "@/features/study_material/slices/studentLearningSlice";
 import {
   downloadStudentSubjectArtifact,
   enrollInSubject,
   fetchStudentConceptArtifact,
   fetchStudentSubjectArtifact,
   getStudentFlashcards,
-  getStudentSubjectProgression,
   getStudentResources,
   listPublishedConcepts,
-  listStudentBookmarks,
-  addStudentBookmark,
-  removeStudentBookmark,
   listPublishedMaterials,
   listPublishedSubjects
 } from "@/features/study_material/services/studyMaterialService";
@@ -35,7 +43,6 @@ import {
 } from "@/features/study_material/utils/flashcards";
 import { startQuizSession, startTopicAssessment } from "@/features/quiz/services/quizService";
 import type {
-  ConceptBookmarkResponse,
   ConceptMaterialResponse,
   ConceptResponse,
   FlashcardItem,
@@ -45,15 +52,14 @@ import type {
 } from "@/features/study_material/types";
 
 export const StudentDashboard: React.FC = () => {
+  const dispatch = useAppDispatch();
   const [subjects, setSubjects] = useState<SubjectResponse[]>([]);
   const [activeSubjectId, setActiveSubjectId] = useState<string | null>(null);
   const [concepts, setConcepts] = useState<ConceptResponse[]>([]);
   const [materials, setMaterials] = useState<ConceptMaterialResponse[]>([]);
-  const [progression, setProgression] = useState<StudentSubjectProgressResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [bookmarks, setBookmarks] = useState<ConceptBookmarkResponse[]>([]);
   const navigate = useNavigate();
 
 
@@ -94,6 +100,11 @@ export const StudentDashboard: React.FC = () => {
   const [quizStartMessage, setQuizStartMessage] = useState<string | null>(null);
   const [assessmentStartingConceptId, setAssessmentStartingConceptId] = useState<string | null>(null);
   const [enrollingSubjectId, setEnrollingSubjectId] = useState<string | null>(null);
+  const bookmarks = useAppSelector((state) => selectStudentBookmarks(state, activeSubjectId));
+  const progression = useAppSelector((state) => selectStudentProgression(state, activeSubjectId));
+  const progressionStatus = useAppSelector((state) =>
+    selectStudentProgressionStatus(state, activeSubjectId)
+  );
 
   useEffect(() => {
     const fetchSubjects = async () => {
@@ -121,21 +132,18 @@ export const StudentDashboard: React.FC = () => {
     if (!selectedSubject?.is_enrolled) {
       setConcepts([]);
       setMaterials([]);
-      setProgression(null);
       setLoading(false);
       return;
     }
     const fetchDetails = async () => {
       setLoading(true);
       try {
-        const [conceptsResponse, materialsResponse, progressionResponse] = await Promise.all([
+        const [conceptsResponse, materialsResponse] = await Promise.all([
           listPublishedConcepts(activeSubjectId),
-          listPublishedMaterials(activeSubjectId),
-          getStudentSubjectProgression(activeSubjectId)
+          listPublishedMaterials(activeSubjectId)
         ]);
         setConcepts(conceptsResponse);
         setMaterials(materialsResponse);
-        setProgression(progressionResponse);
       } catch (err: any) {
         setError(err?.response?.data?.detail || "Failed to load materials.");
       } finally {
@@ -151,13 +159,11 @@ export const StudentDashboard: React.FC = () => {
     }
     const selectedSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
     if (!selectedSubject?.is_enrolled) {
-      setBookmarks([]);
       return;
     }
-    listStudentBookmarks(activeSubjectId)
-      .then((items) => setBookmarks(items))
-      .catch(() => setBookmarks([]));
-  }, [activeSubjectId, subjects]);
+    void dispatch(fetchStudentBookmarks(activeSubjectId));
+    void dispatch(fetchStudentProgression(activeSubjectId));
+  }, [activeSubjectId, dispatch, subjects]);
 
   useEffect(() => {
     setFlashcardMeta(null);
@@ -174,15 +180,18 @@ export const StudentDashboard: React.FC = () => {
     setPreviewBlob(null);
     setPreviewError(null);
     setSearchQuery("");
-    setBookmarks([]);
     setSelectedConceptIds([]);
     setQuizStartMessage(null);
-    setProgression(null);
     setAssessmentStartingConceptId(null);
   }, [activeSubjectId]);
 
   const activeSubject = subjects.find((subject) => subject.subject_id === activeSubjectId);
   const canAccessActiveSubject = Boolean(activeSubject?.is_enrolled);
+  const isProgressionLoading =
+    canAccessActiveSubject &&
+    progression === null &&
+    (progressionStatus === "idle" || progressionStatus === "loading");
+  const isDashboardLoading = loading || isProgressionLoading;
   const materialMap = useMemo(() => {
     const map = new Map<string, ConceptMaterialResponse>();
     materials.forEach((material) => map.set(material.concept_id, material));
@@ -258,26 +267,15 @@ export const StudentDashboard: React.FC = () => {
     }
     const marked = bookmarkedIds.has(concept.concept_id);
     try {
-      if (marked) {
-        await removeStudentBookmark(activeSubjectId, concept.concept_id);
-        setBookmarks((prev) =>
-          prev.filter((item) => item.concept_id !== concept.concept_id)
-        );
-      } else {
-        await addStudentBookmark(activeSubjectId, concept.concept_id);
-        setBookmarks((prev) => [
-          ...prev,
-          {
-            concept_id: concept.concept_id,
-            concept_name: concept.name,
-            subject_id: activeSubjectId,
-            subject_name: activeSubject?.name || "Subject",
-            created_at: new Date().toISOString()
-          }
-        ]);
-      }
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || "Bookmark update failed.");
+      await dispatch(
+        toggleStudentBookmark({
+          subjectId: activeSubjectId,
+          conceptId: concept.concept_id,
+          currentlyBookmarked: marked
+        })
+      ).unwrap();
+    } catch (err) {
+      setError(typeof err === "string" ? err : "Bookmark update failed.");
     }
   };
 
@@ -929,7 +927,7 @@ export const StudentDashboard: React.FC = () => {
         </div>
       </div>
 
-      {loading ? (
+      {isDashboardLoading ? (
         <div className="loading-overlay">
           <LoadingSpinner />
         </div>
@@ -1107,10 +1105,6 @@ export const StudentDashboard: React.FC = () => {
     </DashboardLayout>
   );
 };
-
-
-
-
 
 
 
