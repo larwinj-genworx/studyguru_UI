@@ -614,6 +614,34 @@ const hasExampleContent = (section: LearningSection) => {
   return Boolean(title || prompt || result || steps.length);
 };
 
+const isKeyStepsContainer = (section: LearningSection) => {
+  const title = section.title.trim().toLowerCase();
+  return title === "key steps" || title === "core ideas";
+};
+
+const getNumberedStepItems = (section: LearningSection) => {
+  const numberedBlock = section.blocks.find(
+    (block) => block.type === "list" && block.style === "number"
+  );
+  if (!numberedBlock || numberedBlock.type !== "list") {
+    return [];
+  }
+  return numberedBlock.items.map((item) => item.trim()).filter(Boolean);
+};
+
+const shouldKeepKeyStepsSection = (section: LearningSection) => getNumberedStepItems(section).length >= 2;
+
+const stepChildDuplicatesParent = (child: LearningSection, parentStepItems: string[]) => {
+  if (!isStepSection(child)) {
+    return false;
+  }
+  const childText = normalizeText(getStepParagraphText(child) || getSectionDisplayTitle(child));
+  if (!childText) {
+    return false;
+  }
+  return parentStepItems.some((item) => normalizeText(item) === childText);
+};
+
 const pruneSections = (sections: LearningSection[]): LearningSection[] => {
   return sections.reduce<LearningSection[]>((acc, section) => {
     const children = section.children?.length ? pruneSections(section.children) : [];
@@ -623,6 +651,33 @@ const pruneSections = (sections: LearningSection[]): LearningSection[] => {
         return acc;
       }
       acc.push({ ...section, children: exampleChildren });
+      return acc;
+    }
+    if (isKeyStepsContainer(section)) {
+      const stepItems = getNumberedStepItems(section);
+      const cleanedChildren = children.filter((child) => !stepChildDuplicatesParent(child, stepItems));
+      const cleanedBlocks = section.blocks.filter(
+        (block) =>
+          !(
+            block.type === "callout" &&
+            (block.title || "").trim().toLowerCase() === "why this matters"
+          )
+      );
+      const normalizedSection = {
+        ...section,
+        title: stepItems.length >= 2 ? "Key Steps" : section.title,
+        blocks: cleanedBlocks,
+        children: cleanedChildren
+      };
+      const hasBlocks = normalizedSection.blocks.length;
+      const hasChildren = normalizedSection.children.length;
+      if (!shouldKeepKeyStepsSection(normalizedSection) && !hasChildren) {
+        return acc;
+      }
+      if (!hasBlocks && !hasChildren) {
+        return acc;
+      }
+      acc.push(normalizedSection);
       return acc;
     }
     const hasBlocks = section.blocks?.length;
