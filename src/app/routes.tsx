@@ -9,10 +9,10 @@ import {
 } from "@/features/auth/selectors/authSelectors";
 import { LoginPage } from "@/features/auth/components/LoginPage";
 import { RequireAuth } from "@/features/auth/components/RequireAuth";
-import { SignupPage } from "@/features/auth/components/SignupPage";
 import { StudentQuizPage } from "@/features/quiz/components/StudentQuizPage";
 import { AdminDashboard } from "@/features/study_material/components/AdminDashboard";
 import { AdminStudentActivityPage } from "@/features/study_material/components/AdminStudentActivityPage";
+import { AdminStudentsPage } from "@/features/study_material/components/AdminStudentsPage";
 import { ConceptLearningPage } from "@/features/study_material/components/ConceptLearningPage";
 import { StudentDashboard } from "@/features/study_material/components/StudentDashboard";
 import { useAppSelector } from "@/hooks/useAppSelector";
@@ -39,10 +39,6 @@ export const AppRoutes: React.FC = () => {
         element={isAuthenticated ? <Navigate to={defaultPath} replace /> : <LoginPage />}
       />
       <Route
-        path="/signup"
-        element={isAuthenticated ? <Navigate to={defaultPath} replace /> : <SignupPage />}
-      />
-      <Route
         path="/admin"
         element={
           <RequireAuth role="admin">
@@ -55,6 +51,14 @@ export const AppRoutes: React.FC = () => {
         element={
           <RequireAuth role="admin">
             <AdminStudentActivityPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/students"
+        element={
+          <RequireAuth role="admin">
+            <AdminStudentsPage />
           </RequireAuth>
         }
       />

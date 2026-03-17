@@ -1,5 +1,5 @@
-import React from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 
 import { logoutUser } from "@/features/auth/slices/authThunks";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
@@ -27,10 +27,17 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     navigate("/login");
   };
 
+  useEffect(() => {
+    document.body.classList.add("dashboard-body");
+    return () => {
+      document.body.classList.remove("dashboard-body");
+    };
+  }, []);
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div>
+        <div className="sidebar-top">
           <div className="brand">
             <div className="brand-mark">SG</div>
             <div>
@@ -38,14 +45,31 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
               <span className="brand-role">{role === "admin" ? "Administrator" : "Student"}</span>
             </div>
           </div>
-          <div className="sidebar-card">
+          {role === "admin" ? (
+            <nav className="sidebar-nav" aria-label="Admin navigation">
+              <NavLink to="/admin" end className={({ isActive }) => `sidebar-nav-link ${isActive ? "active" : ""}`.trim()}>
+                <span>Syllabus Workspace</span>
+                <small>Course setup and publishing</small>
+              </NavLink>
+              <NavLink
+                to="/admin/students"
+                className={({ isActive }) => `sidebar-nav-link ${isActive ? "active" : ""}`.trim()}
+              >
+                <span>Student Hub</span>
+                <small>Student search and tracking</small>
+              </NavLink>
+            </nav>
+          ) : null}
+        </div>
+        <div className="sidebar-bottom">
+          <div className="sidebar-card sidebar-account-card">
             <p className="sidebar-label">Signed in as</p>
             <p className="sidebar-value">{email}</p>
           </div>
+          <button className="button ghost" onClick={handleLogout}>
+            Log out
+          </button>
         </div>
-        <button className="button ghost" onClick={handleLogout}>
-          Log out
-        </button>
       </aside>
       <main className="content">
         {showHeader ? (

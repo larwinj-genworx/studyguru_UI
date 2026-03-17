@@ -22,10 +22,31 @@ export interface SubjectResponse {
   concepts: ConceptResponse[];
 }
 
-export interface SubjectEnrollmentResponse {
+export interface ManagedStudentSubjectResponse {
   subject_id: string;
-  student_id: string;
-  enrolled_at: string;
+  name: string;
+  published: boolean;
+}
+
+export interface AdminManagedStudentResponse {
+  user_id: string;
+  email: string;
+  role: "student";
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  last_login_at?: string | null;
+  assigned_subjects: ManagedStudentSubjectResponse[];
+}
+
+export interface AdminManagedStudentCreateRequest {
+  email: string;
+  password: string;
+}
+
+export interface AdminManagedStudentUpdateRequest {
+  password?: string;
+  is_active?: boolean;
 }
 
 export type StudentTopicProgressState =
